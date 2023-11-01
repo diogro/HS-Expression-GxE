@@ -1,3 +1,5 @@
+source(here::here("Rscripts/load_install_packages.R"))
+
 pca <- function(x, space = c("rows", "columns"),
                 center = TRUE, scale = FALSE) {
   space <- match.arg(space)
@@ -20,11 +22,6 @@ pca <- function(x, space = c("rows", "columns"),
   }
   return(list(pc = pc, loading = loading, pve = pve))
 }
-
-library(rrcov)
-library(ggplot2)
-library(cowplot)
-library(viridis)
 pca_plot_outliers = function(resids, color = NULL){
   pca_resid = pca(resids)
   results = t(pca_resid$pc)
@@ -47,7 +44,7 @@ pca_plot_outliers = function(resids, color = NULL){
     labs(x = paste0("PC1 (", round(pca_resid$pve[1]*100, 2), "%)"),
          y = paste0("PC2 (", round(pca_resid$pve[2]*100, 2), "%)")) +
     theme_cowplot() +
-    scale_color_manual(values = colors[1:length(unique(color))]) +
+    scale_color_manual(values = colors) +
     theme(legend.position = "none")
   plot
 }

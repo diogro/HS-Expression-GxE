@@ -51,7 +51,8 @@ Sys.time()
 end=Sys.time()
 cat("total time = ", end-start)
 
-x <- removeBatchEffect(countdata.voom, model.matrix(~1+coldata$egglayBatch+coldata$RNAseqBatch+coldata$platingBatch+coldata$RNAlibBatch), 
+x <- removeBatchEffect(countdata.voom,
+                       model.matrix(~1+coldata$egglayBatch+coldata$RNAseqBatch+coldata$platingBatch+coldata$RNAlibBatch), 
                        design=model.matrix(~0+coldata$treatment))  
 
 

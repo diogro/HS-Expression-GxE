@@ -2,3 +2,5 @@ data
 *.pdf
 cache/*
 tmp/*
+.nfs*
+*.gds
