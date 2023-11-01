@@ -28,26 +28,6 @@ covariates = bind_rows(head = import("data/GXEpaper/ALLDATA/UsefulPairs_DNA_RNA_
            egglayBatch = as.factor(egglayBatch),
            platingBatch = as.factor(platingBatch))
 
-pdf('tmp/snp_pca.pdf')
-    treatment = filter(covariates, tissue == "head") |> 
-        arrange(match(id, snp_pca$head$sample.id)) |>
-        pull(treatment)
-    plot(snp_pca$head, eig=1:5,  
-        col=treatment,
-        pch=20, cex=0.5)
-    treatment = filter(covariates, tissue == "body") |> 
-        arrange(match(id, snp_pca$body$sample.id)) |>
-        pull(treatment)
-    plot(snp_pca$body, eig=1:5,  
-        col=treatment,
-        pch=20, cex=0.5)
-    par(mfrow=c(1, 2))
-    pc.percent = na.omit(snp_pca$head$varprop*100)
-    plot(pc.percent, pch=19)
-    pc.percent = na.omit(snp_pca$body$varprop*100)
-    plot(pc.percent, pch=19)
-dev.off()
-
 ###############
 # Read count data
 ###############
@@ -72,7 +52,7 @@ filterGenes <- function(countdata.norm){
     countdata.norm <- countdata.norm[-drop, ]
 
     # Removing genes with expression less than 1 cpm is more than 20% of the samples
-    prop_non_expressed = apply(cpm(countdata.norm), 1, \(x) sum(x < 1)/length(x))
+    prop_non_expressed = apply(cpm(countdata.norm), 1, \(x) sum(x < 1)) / nrow(countdata.norm$samples)
     drop <- which(prop_non_expressed > 0.2)
     print(length(drop))
     countdata.norm <- countdata.norm[-drop, ]
@@ -81,15 +61,17 @@ filterGenes <- function(countdata.norm){
     countdata.norm
 }
 
+DGEList
 y <- map(countdata, DGEList)
 y <- map(y, calcNormFactors)
 y.filtered <- map(y, filterGenes)
+
 
 #################
 # Set model matrices
 #################
 
-setModelMatrices = function(x, covariates){
+setModelMatrices = function(x, y, covariates){
     cov = filter(covariates, tissue == x) |> 
         filter(id %in% rownames(y[[x]]$samples)) |>
         arrange(match(id, rownames(y[[x]]$samples)))
@@ -103,16 +85,24 @@ setModelMatrices = function(x, covariates){
                         platingBatch + 
                         RNAlibBatch, cov) 
     design <- model.matrix(~as.factor(treatment), cov) 
-    list(mod1 = mod1, mod0 = mod0, design = design)
+    list(counts = y[[x]], covariates = cov, mod1 = mod1, mod0 = mod0, design = design)
 }
-model_matrices = map(c(head = "head", body = "body"), setModelMatrices, covariates)
+rnaseq_data = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates)
 
-cpm_data_sva = cpm(y, log=TRUE, prior.count=3)
+setCPMVoom <- function(data){
+    data$cpm = cpm(data$counts, log=TRUE, prior.count=3)
+    data$voom <- voom(data$counts, data$mod1)
+    data
+}
+rnaseq_data = map(rnaseq_data, setCPMVoom)
 
-tic()
-svobj = sva(cpm_data_sva, mod1, mod0, n.sv=4); toc()
+setSVA = function(data){
+    data$sva_cpm = sva(data$cpm, data$mod1, data$mod0, n.sv=4)
+    data$sva_voom = sva(data$voom$E, data$mod1, data$mod0, n.sv=4)
+    data
+}
+rnaseq_data = map(rnaseq_data, setSVA)
 
-v <- voom(y, mod1)
 tic()
 voom_svobj = sva(v$E, mod1, mod0, n.sv=5); toc()
 
