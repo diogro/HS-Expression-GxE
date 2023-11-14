@@ -7,11 +7,11 @@ source(here::here("Rscripts/load_install_packages.R"))
 vcf.head <- "data/GXEpaper/HEAD/genotypes/VCF/Dmel_head_hs_ctrl_Miss80_MAF5_LD8_HWE_1975ind.vcf"
 vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
 
-seqVCF2GDS(vcf.head, "ccm_head.gds", parallel=6L)
-seqVCF2GDS(vcf.body, "ccm_body.gds", parallel=6L)
+seqVCF2GDS(vcf.head, "cache/ccm_head.gds", parallel=6L)
+seqVCF2GDS(vcf.body, "cache/ccm_body.gds", parallel=6L)
 
-snps_head = seqOpen("ccm_head.gds") # seqClose("ccm_head.gds")
-snps_body = seqOpen("ccm_body.gds") # seqClose("ccm_body.gds")
+snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
+snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
 
 
 ################
@@ -134,6 +134,9 @@ makeResiduals <- function(data){
         print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
     dev.off()
     data$cpm_residuals = no.svs
+    rownames(data$cpm_residuals) = rownames(data$cpm) = rownames(data$voom$E) = data$counts$genes[,1]
     data
 }
 rnaseq_data = map(rnaseq_data, makeResiduals)
+
+export(rnaseq_data, "cache/rnaseq_all.rds")
