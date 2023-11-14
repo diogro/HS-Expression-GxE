@@ -107,9 +107,18 @@ setCPMVoom <- function(data){
 }
 rnaseq_data = map(rnaseq_data, setCPMVoom)
 
+setSVAnum = function(data){
+    data$n.sva <- list(cpm  = num.sv(data$cpm, data$mod1, method="leek"),
+                       voom = num.sv(data$voom$E, data$mod1, method="leek"))
+    data
+}
+rnaseq_data = map(rnaseq_data, setSVAnum)
+
 setSVA = function(data){
-    data$sva <- list(cpm = sva(data$cpm, data$mod1, data$mod0, n.sv=4, method = "two-step"),
-                    voom = sva(data$voom$E, data$mod1, data$mod0, n.sv=4, method = "two-step"))
+    data$sva <- list(cpm = sva(data$cpm, data$mod1, data$mod0, 
+                               n.sv=data$n.sva$cpm, method = "two-step"),
+                     voom = sva(data$voom$E, data$mod1, data$mod0, 
+                                n.sv=data$n.sva$voom, method = "two-step"))
     data
 }
 rnaseq_data = map(rnaseq_data, setSVA)
@@ -117,83 +126,14 @@ rnaseq_data = map(rnaseq_data, setSVA)
 makeResiduals <- function(data){
     covariates <- data$covariates
     col = pull(covariates, treatment)
-    data$residuals = list(cpm_nsv = vector("list", 4))
-    for(i in 1:4){
-        no.svs <- removeBatchEffect(data$cpm, 
-                                    design = data$design, 
-                                    covariates = cbind(data$mod0, data$sva$cpm$sv[,1:i]))
-        cpm_pca_no.svs = pca(no.svs)
-        png(paste0('tmp/CPM-PCA-', data$tissue, '-sv-', i, '.png'), width = 1080, height = 1080)
-            print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
-        dev.off()
-        data$residuals$num_sva[[i]] <- no.svs
-    }
-    data$residuals$cpm = data$residuals$num_sva[[4]]
-    data$residuals$voom_nsv = vector("list", 4)
-    for(i in 1:4){
-        no.svs <- removeBatchEffect(data$voom, 
-                                    design = data$design, 
-                                    covariates = cbind(data$mod0, data$sva$voom$sv[,1:i]))
-        voom_pca_no.svs = pca(no.svs)
-        png(paste0('tmp/voom-PCA-', data$tissue, '-sv-', i, '.png'), width = 1080, height = 1080)
-            print(pca_plot(voom_pca_no.svs, c("C", "HS")[col]))
-        dev.off()
-        data$residuals$num_sva[[i]] <- no.svs
-    }
-    data$residuals$voom = data$residuals$num_sva[[4]]
+    no.svs <- removeBatchEffect(data$cpm, 
+                                design = data$design, 
+                                covariates = cbind(data$mod0, data$sva$cpm$sv))
+    cpm_pca_no.svs = pca(no.svs)
+    png(paste0('tmp/CPM-PCA-', data$tissue, '-sva-corrected.png'), width = 1080, height = 1080)
+        print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
+    dev.off()
+    data$cpm_residuals = no.svs
     data
 }
 rnaseq_data = map(rnaseq_data, makeResiduals)
-
-tic()
-voom_svobj = sva(v$E, mod1, mod0, n.sv=5); toc()
-
-for(i in 1:4){
-    no.svs <- removeBatchEffect(cpm_data_sva, 
-                                design = design, 
-                                covariates = cbind(mod0, svobj$sv[,1:i]))
-    cpm_pca_no.svs = pca(no.svs)
-    col = covariates[match(colnames(no.svs), covariates$V1), 'treatment'] 
-    png(paste0('tmp/CPM-PCA-sv', i, '.png'), width = 1080, height = 1080)
-    print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
-    dev.off()
-}
-
-library(patchwork)
-library(purrr)
-no.svs <- removeBatchEffect(cpm_data_sva, 
-                            design = design, 
-                            covariates = cbind(mod0, svobj$sv[,1:i]))
-col = covariates[match(colnames(cpm_data_sva), covariates$V1), 'treatment'] 
-cpm_ctrl = cpm_data_sva[, col == 1]
-cpm_hs = cpm_data_sva[, col == 2]
-
-pca_outliers = map(list(cpm_ctrl, cpm_hs), pca_plot_outliers)
-
-
-png(paste0('tmp/CPM-PCA-outliers.png'), width = 2*1080, height = 1080)
-pca_outliers[[1]] + ggtitle("Ctrl") + pca_outliers[[2]] + ggtitle("HS")
-dev.off()
-
-for(i in 1:5){
-    no.svs <- removeBatchEffect(v$E, 
-                                design = design, 
-                                covariates = cbind(mod0, voom_svobj$sv[,1:i]))
-    cpm_pca_no.svs = pca(no.svs)
-    col = covariates[match(colnames(no.svs), covariates$V1), 'treatment'] 
-    png(paste0('tmp/VOOM-PCA-sv', i, '.png'), width = 1080, height = 1080)
-    print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
-    dev.off()
-}
-
-col = covariates[match(colnames(VOOMCounts_CPM1_head_hsctrl_covfree), covariates$V1), 'treatment'] 
-VOOM_ctrl = VOOMCounts_CPM1_head_hsctrl_covfree[, col == 1]
-VOOM_hs = VOOMCounts_CPM1_head_hsctrl_covfree[, col == 2]
-
-pca_outliers = map(list(VOOM_ctrl, VOOM_hs), pca_plot_outliers)
-
-
-png(paste0('tmp/VOOM-PCA-outliers.png'), width = 2*1080, height = 1080)
-pca_outliers[[1]] + ggtitle("Ctrl") + pca_outliers[[2]] + ggtitle("HS")
-dev.off()
-
