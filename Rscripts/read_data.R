@@ -71,10 +71,16 @@ y.filtered <- map(y, filterGenes)
 # Set model matrices
 #################
 
-setModelMatrices = function(x, y, covariates){
-    cov = filter(covariates, tissue == x) |> 
-        filter(id %in% rownames(y[[x]]$samples)) |>
-        arrange(match(id, rownames(y[[x]]$samples)))
+correctModelMatrix = function(X){
+    QR <- qr(crossprod(X))                 # Get the QR decomposition
+    vars <- QR$pivot[seq_len(QR$rank)]     # Variable numbers
+    X = X[,vars]
+    X
+}
+setModelMatrices = function(current_tissue, y, covariates){
+    cov = filter(covariates, tissue == current_tissue) |> 
+        filter(id %in% rownames(y[[current_tissue]]$samples)) |>
+        arrange(match(id, rownames(y[[current_tissue]]$samples)))
     mod1 <- model.matrix(~0+treatment + 
                         egglayBatch + 
                         RNAseqBatch + 
@@ -85,7 +91,12 @@ setModelMatrices = function(x, y, covariates){
                         platingBatch + 
                         RNAlibBatch, cov) 
     design <- model.matrix(~as.factor(treatment), cov) 
-    list(counts = y[[x]], covariates = cov, mod1 = mod1, mod0 = mod0, design = design)
+    list(counts = y[[current_tissue]], 
+         tissue = current_tissue,
+         covariates = cov, 
+         mod1 = correctModelMatrix(mod1),
+         mod0 = correctModelMatrix(mod0), 
+         design = design)
 }
 rnaseq_data = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates)
 
@@ -97,11 +108,42 @@ setCPMVoom <- function(data){
 rnaseq_data = map(rnaseq_data, setCPMVoom)
 
 setSVA = function(data){
-    data$sva_cpm = sva(data$cpm, data$mod1, data$mod0, n.sv=4)
-    data$sva_voom = sva(data$voom$E, data$mod1, data$mod0, n.sv=4)
+    data$sva <- list(cpm = sva(data$cpm, data$mod1, data$mod0, n.sv=4, method = "two-step"),
+                    voom = sva(data$voom$E, data$mod1, data$mod0, n.sv=4, method = "two-step"))
     data
 }
 rnaseq_data = map(rnaseq_data, setSVA)
+
+makeResiduals <- function(data){
+    covariates <- data$covariates
+    col = pull(covariates, treatment)
+    data$residuals = list(cpm_nsv = vector("list", 4))
+    for(i in 1:4){
+        no.svs <- removeBatchEffect(data$cpm, 
+                                    design = data$design, 
+                                    covariates = cbind(data$mod0, data$sva$cpm$sv[,1:i]))
+        cpm_pca_no.svs = pca(no.svs)
+        png(paste0('tmp/CPM-PCA-', data$tissue, '-sv-', i, '.png'), width = 1080, height = 1080)
+            print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
+        dev.off()
+        data$residuals$num_sva[[i]] <- no.svs
+    }
+    data$residuals$cpm = data$residuals$num_sva[[4]]
+    data$residuals$voom_nsv = vector("list", 4)
+    for(i in 1:4){
+        no.svs <- removeBatchEffect(data$voom, 
+                                    design = data$design, 
+                                    covariates = cbind(data$mod0, data$sva$voom$sv[,1:i]))
+        voom_pca_no.svs = pca(no.svs)
+        png(paste0('tmp/voom-PCA-', data$tissue, '-sv-', i, '.png'), width = 1080, height = 1080)
+            print(pca_plot(voom_pca_no.svs, c("C", "HS")[col]))
+        dev.off()
+        data$residuals$num_sva[[i]] <- no.svs
+    }
+    data$residuals$voom = data$residuals$num_sva[[4]]
+    data
+}
+rnaseq_data = map(rnaseq_data, makeResiduals)
 
 tic()
 voom_svobj = sva(v$E, mod1, mod0, n.sv=5); toc()
