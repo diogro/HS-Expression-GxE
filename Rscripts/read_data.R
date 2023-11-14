@@ -140,3 +140,4 @@ makeResiduals <- function(data){
 rnaseq_data = map(rnaseq_data, makeResiduals)
 
 export(rnaseq_data, "cache/rnaseq_all.rds")
+export(covariates, "cache/covariates.rds")

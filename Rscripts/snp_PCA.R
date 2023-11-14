@@ -1,5 +1,10 @@
 source(here::here("Rscripts/functions.R"))
-source(here::here("Rscripts/read_data.R"))
+# source(here::here("Rscripts/read_data.R"))
+
+covariates = import("cache/covariates.rds")
+
+snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
+snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
 
 snp_pca <- list(head = snpgdsPCA(snps_head),
                 body = snpgdsPCA(snps_body))
