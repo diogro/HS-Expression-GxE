@@ -22,7 +22,7 @@ covariates = bind_rows(head = import("data/GXEpaper/ALLDATA/UsefulPairs_DNA_RNA_
                        body = import("data/GXEpaper/ALLDATA/UsefulPairs_DNA_RNA_body_noOutliers_Feb6.20.txt"),
                        .id = "tissue") |> 
     as_tibble() |>
-    mutate(treatment = as.factor(treatment),
+    mutate(treatment = as.factor(treatment-1),
            RNAlibBatch = as.factor(RNAlibBatch),
            RNAseqBatch = as.factor(RNAseqBatch),
            egglayBatch = as.factor(egglayBatch),
@@ -83,21 +83,22 @@ correctModelMatrix = function(X){
     X = X[,vars]
     X
 }
-> setModelMatrices = function(current_tissue, y, covariates){
+setModelMatrices = function(current_tissue, y, covariates){
     cov = filter(covariates, tissue == current_tissue) |> 
           filter(id %in% rownames(y[[current_tissue]]$samples)) |>
           arrange(match(id, rownames(y[[current_tissue]]$samples)))
-    mod1 <- model.matrix(~0+treatment + 
+    mod1 <- model.matrix(~1+treatment + 
                         egglayBatch + 
                         RNAseqBatch + 
                         platingBatch + 
                         RNAlibBatch, cov) 
-                      RNAseqBatch + 
-    mod0 <- model.matrix(~0+egglayBatch + 
+    mod0 <- model.matrix(~1+egglayBatch + 
                         RNAseqBatch + 
                         platingBatch + 
                         RNAlibBatch, cov) 
     design <- model.matrix(~as.factor(treatment), cov) 
+    colnames(design)[1:2] <- c("Intercept","hs")
+    colnames(mod1)[1:2] <- c("Intercept","hs")
     rownames(y[[current_tissue]]$counts) <- y[[current_tissue]]$genes[,1]
     list(counts = y[[current_tissue]], 
          tissue = current_tissue,
@@ -126,39 +127,40 @@ setSVAnum = function(data){
 future::plan(list(future::tweak(future::multisession, workers = 2), 
                   future::tweak(future::multisession, workers = 3)))
 rnaseq_data = future_map(rnaseq_data, setSVAnum)
+rnaseq_data |> map("n.sva")
 
-setSVA = function(data){
-     counts_list = list(cpm = data$cpm, 
-                        voom = data$voom$E, 
-                        l2c = data$l2c)
+# setSVA = function(data){
+#      counts_list = list(cpm = data$cpm, 
+#                         voom = data$voom$E, 
+#                         l2c = data$l2c)
      
-     data$sva <- future_map2(counts_list, data$n.sva, 
-                             \(x, y) sva(x, data$mod1, data$mod0, n.sv=y, method = "two-step"))
-     data
+#      data$sva <- future_map2(counts_list, data$n.sva, 
+#                              \(x, y) sva(x, data$mod1, data$mod0, n.sv=y, method = "two-step"))
+#      data
+# }
+# rnaseq_data = map(rnaseq_data, setSVA)
+
+getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatment){
+    no.batch <- removeBatchEffect(x, 
+                                  design = design, 
+                                  covariates = cbind(mod0, sva))
+    pca_no.batch = pca(no.batch)
+    png(paste0('tmp/PCA-batch-corrected-', tissue, '-', label, '.png'), width = 1080, height = 1080)
+        print(pca_plot(pca_no.batch, c("C", "HS")[treatment]))
+    dev.off()
+    rownames(no.batch) = data$counts$genes[,1]
+    no.batch
 }
-rnaseq_data = map(rnaseq_data, setSVA)
 
 makeResiduals <- function(data){
     covariates <- data$covariates
-    col = pull(covariates, treatment)
-
-    getBatchResiduals <- function(x, label, design, mod0){
-        no.batch <- removeBatchEffect(x, 
-                                      design = data$design, 
-                                      covariates = cbind(data$mod0))
-        pca_no.batch = pca(no.batch)
-        png(paste0('tmp/PCA-batch-corrected-', data$tissue, '-', label, '.png'), width = 1080, height = 1080)
-            print(pca_plot(pca_no.batch, c("C", "HS")[col]))
-        dev.off()
-        rownames(no.batch) = data$counts$genes[,1]
-        no.batch
-    }
-    
     counts_list = list(cpm = data$cpm, 
                        voom = data$voom$E, 
                        l2c = data$l2c)
     data$batch_residuals <- future_map2(counts_list, names(counts_list), 
-                            \(x, y) getBatchResiduals(x, y, data$design, data$mod0))  
+                            \(x, y) getBatchResiduals(x, y, data$tissue, 
+                                                      data$design, data$mod0,
+                                                      treatment = pull(covariates, treatment)))  
     data
 }
 options(future.globals.maxSize = 1e6 * 1024)

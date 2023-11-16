@@ -12,6 +12,16 @@ packages <- c("gdsfmt",
               "DESeq2",
               "rrcov", 
               "cowplot", 
-              "viridis")
+              "viridis",
+              "patchwork", 
+              "ggrepel", 
+              "clusterProfiler", 
+              "pointblank",
+              "apeglm",
+              "ashr", "dcgerard/vicar",
+              "furrr")
 # pak::pkg_install(packages)
+packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)
+
+
