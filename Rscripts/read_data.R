@@ -51,6 +51,12 @@ filterGenes <- function(countdata.norm){
     print(length(drop))
     countdata.norm <- countdata.norm[-drop, ]
 
+    # Removing genes with mean expression less than 10 counts
+    mean_count = apply(countdata.norm$counts, 1, mean)
+    drop <- which(mean_count < 10)
+    print(length(drop))
+    countdata.norm <- countdata.norm[-drop, ]
+
     # Removing genes with expression less than 1 cpm is more than 20% of the samples
     prop_non_expressed = apply(cpm(countdata.norm), 1, \(x) sum(x < 1)) / nrow(countdata.norm$samples)
     drop <- which(prop_non_expressed > 0.2)
@@ -77,20 +83,22 @@ correctModelMatrix = function(X){
     X = X[,vars]
     X
 }
-setModelMatrices = function(current_tissue, y, covariates){
+> setModelMatrices = function(current_tissue, y, covariates){
     cov = filter(covariates, tissue == current_tissue) |> 
-        filter(id %in% rownames(y[[current_tissue]]$samples)) |>
-        arrange(match(id, rownames(y[[current_tissue]]$samples)))
+          filter(id %in% rownames(y[[current_tissue]]$samples)) |>
+          arrange(match(id, rownames(y[[current_tissue]]$samples)))
     mod1 <- model.matrix(~0+treatment + 
                         egglayBatch + 
                         RNAseqBatch + 
                         platingBatch + 
                         RNAlibBatch, cov) 
+                      RNAseqBatch + 
     mod0 <- model.matrix(~0+egglayBatch + 
                         RNAseqBatch + 
                         platingBatch + 
                         RNAlibBatch, cov) 
     design <- model.matrix(~as.factor(treatment), cov) 
+    rownames(y[[current_tissue]]$counts) <- y[[current_tissue]]$genes[,1]
     list(counts = y[[current_tissue]], 
          tissue = current_tissue,
          covariates = cov, 
@@ -101,43 +109,60 @@ setModelMatrices = function(current_tissue, y, covariates){
 rnaseq_data = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates)
 
 setCPMVoom <- function(data){
-    data$cpm = cpm(data$counts, log=TRUE, prior.count=3)
+    data$cpm  <-  cpm(data$counts, log=TRUE)
     data$voom <- voom(data$counts, data$mod1)
+    data$l2c  <- log2(data$counts$counts + 1)
     data
 }
 rnaseq_data = map(rnaseq_data, setCPMVoom)
 
 setSVAnum = function(data){
-    data$n.sva <- list(cpm  = num.sv(data$cpm, data$mod1, method="leek"),
-                       voom = num.sv(data$voom$E, data$mod1, method="leek"))
+    counts_list = list(cpm = data$cpm, 
+                       voom = data$voom$E, 
+                       l2c = data$l2c)
+    data$n.sva <- future_map(counts_list, num.sv, data$mod1, method="leek")
     data
 }
-rnaseq_data = map(rnaseq_data, setSVAnum)
+future::plan(list(future::tweak(future::multisession, workers = 2), 
+                  future::tweak(future::multisession, workers = 3)))
+rnaseq_data = future_map(rnaseq_data, setSVAnum)
 
 setSVA = function(data){
-    data$sva <- list(cpm = sva(data$cpm, data$mod1, data$mod0, 
-                               n.sv=data$n.sva$cpm, method = "two-step"),
-                     voom = sva(data$voom$E, data$mod1, data$mod0, 
-                                n.sv=data$n.sva$voom, method = "two-step"))
-    data
+     counts_list = list(cpm = data$cpm, 
+                        voom = data$voom$E, 
+                        l2c = data$l2c)
+     
+     data$sva <- future_map2(counts_list, data$n.sva, 
+                             \(x, y) sva(x, data$mod1, data$mod0, n.sv=y, method = "two-step"))
+     data
 }
 rnaseq_data = map(rnaseq_data, setSVA)
 
 makeResiduals <- function(data){
     covariates <- data$covariates
     col = pull(covariates, treatment)
-    no.svs <- removeBatchEffect(data$cpm, 
-                                design = data$design, 
-                                covariates = cbind(data$mod0, data$sva$cpm$sv))
-    cpm_pca_no.svs = pca(no.svs)
-    png(paste0('tmp/CPM-PCA-', data$tissue, '-sva-corrected.png'), width = 1080, height = 1080)
-        print(pca_plot(cpm_pca_no.svs, c("C", "HS")[col]))
-    dev.off()
-    data$cpm_residuals = no.svs
-    rownames(data$cpm_residuals) = rownames(data$cpm) = rownames(data$voom$E) = data$counts$genes[,1]
+
+    getBatchResiduals <- function(x, label, design, mod0){
+        no.batch <- removeBatchEffect(x, 
+                                      design = data$design, 
+                                      covariates = cbind(data$mod0))
+        pca_no.batch = pca(no.batch)
+        png(paste0('tmp/PCA-batch-corrected-', data$tissue, '-', label, '.png'), width = 1080, height = 1080)
+            print(pca_plot(pca_no.batch, c("C", "HS")[col]))
+        dev.off()
+        rownames(no.batch) = data$counts$genes[,1]
+        no.batch
+    }
+    
+    counts_list = list(cpm = data$cpm, 
+                       voom = data$voom$E, 
+                       l2c = data$l2c)
+    data$batch_residuals <- future_map2(counts_list, names(counts_list), 
+                            \(x, y) getBatchResiduals(x, y, data$design, data$mod0))  
     data
 }
-rnaseq_data = map(rnaseq_data, makeResiduals)
+options(future.globals.maxSize = 1e6 * 1024)
+rnaseq_data = future_map(rnaseq_data, makeResiduals)
 
 export(rnaseq_data, "cache/rnaseq_all.rds")
 export(covariates, "cache/covariates.rds")
