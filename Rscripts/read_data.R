@@ -117,28 +117,30 @@ setCPMVoom <- function(data){
 }
 rnaseq_data = map(rnaseq_data, setCPMVoom)
 
-setSVAnum = function(data){
-    counts_list = list(cpm = data$cpm, 
-                       voom = data$voom$E, 
-                       l2c = data$l2c)
-    data$n.sva <- future_map(counts_list, num.sv, data$mod1, method="leek")
-    data
-}
-future::plan(list(future::tweak(future::multisession, workers = 2), 
-                  future::tweak(future::multisession, workers = 3)))
-rnaseq_data = future_map(rnaseq_data, setSVAnum)
-rnaseq_data |> map("n.sva")
-
-# setSVA = function(data){
-#      counts_list = list(cpm = data$cpm, 
-#                         voom = data$voom$E, 
-#                         l2c = data$l2c)
-     
-#      data$sva <- future_map2(counts_list, data$n.sva, 
-#                              \(x, y) sva(x, data$mod1, data$mod0, n.sv=y, method = "two-step"))
-#      data
+# setSVAnum = function(data){
+#     counts_list = list(cpm = data$cpm, 
+#                        voom = data$voom$E, 
+#                        l2c = data$l2c)
+#     data$n.sva <- future_map(counts_list, num.sv, data$mod1, method="leek")
+#     data
 # }
-# rnaseq_data = map(rnaseq_data, setSVA)
+# future::plan(list(future::tweak(future::multisession, workers = 2), 
+#                   future::tweak(future::multisession, workers = 3)))
+# rnaseq_data = future_map(rnaseq_data, setSVAnum)
+# rnaseq_data |> map("n.sva")
+rnaseq_data$head$n.sva = list(cpm = 2, voom = 2, l2c = 2)
+rnaseq_data$body$n.sva = list(cpm = 0, voom = 0, l2c = 1)
+
+setSVA = function(data){
+     counts_list = list(cpm = data$cpm, 
+                        voom = data$voom$E, 
+                        l2c = data$l2c)
+     
+     data$sva <- future_map2(counts_list[data$n.sva!=0], data$n.sva[data$n.sva!=0],
+                             \(x, y) sva(x, data$mod1, data$mod0, n.sv=y, method = "two-step"))
+     data
+}
+rnaseq_data = map(rnaseq_data, setSVA)
 
 getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatment){
     no.batch <- removeBatchEffect(x, 
@@ -151,7 +153,6 @@ getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatm
     rownames(no.batch) = data$counts$genes[,1]
     no.batch
 }
-
 makeResiduals <- function(data){
     covariates <- data$covariates
     counts_list = list(cpm = data$cpm, 
@@ -165,6 +166,33 @@ makeResiduals <- function(data){
 }
 options(future.globals.maxSize = 1e6 * 1024)
 rnaseq_data = future_map(rnaseq_data, makeResiduals)
+
+setMouthwash = function(data){
+     counts_list = list(cpm = data$cpm, 
+                        voom = data$voom$E, 
+                        l2c = data$l2c)
+     
+     data$mwash <- future_map2(counts_list[data$n.sva!=0], data$n.sva[data$n.sva!=0], 
+                             \(x, y) mouthwash(Y = t(x), X = data$mod1, k = y, cov_of_interest = 2,
+                                               include_intercept = FALSE))
+     data
+}
+rnaseq_data = future_map(rnaseq_data, setMouthwash)
+
+
+names(rnaseq_data$head$mwash)
+makeResidualsMwash <- function(data){
+    covariates <- data$covariates
+    counts_list = list(cpm = data$cpm, 
+                       voom = data$voom$E, 
+                       l2c = data$l2c)
+    data$batch_residuals <- future_map2(counts_list[data$n.sva!=0], names(counts_list)[data$n.sva!=0], 
+                            \(x, y) getBatchResiduals(x, paste0(y, "-mwash"), data$tissue, 
+                                                      data$design, data$mod0, sva = data$mwash[[y]]$Zhat,
+                                                      treatment = pull(covariates, treatment)))  
+    data
+}
+rnaseq_data = future_map(rnaseq_data, makeResidualsMwash)
 
 export(rnaseq_data, "cache/rnaseq_all.rds")
 export(covariates, "cache/covariates.rds")

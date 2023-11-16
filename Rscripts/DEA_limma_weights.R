@@ -37,7 +37,7 @@ table = left_join(table
              drop = FALSE),
         by = c(Geneid = "FLYBASE"))
 names(table)
-write_csv(table, affix_date("output/HS-ctrl-DE-table.csv"))
+write_csv(table, affix_date("output/HS-ctrl-DE_limma-table.csv"))
  
 # from here I get the mean expression logcpm per group fit$coefficients
 # and the stderror fit$stdev.unscaled * fit$sigma
