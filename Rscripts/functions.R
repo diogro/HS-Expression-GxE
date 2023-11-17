@@ -1,5 +1,10 @@
 source(here::here("Rscripts/load_install_packages.R"))
 
+future::plan(
+  list(future::tweak(future::multisession, workers = 2), 
+        future::tweak(future::multisession, workers = 3))
+  )
+
 pca <- function(x, space = c("rows", "columns"),
                 center = TRUE, scale = FALSE) {
   space <- match.arg(space)

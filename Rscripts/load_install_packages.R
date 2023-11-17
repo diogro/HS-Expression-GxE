@@ -2,6 +2,7 @@ packages <- c("gdsfmt",
               "SeqArray", 
               "SNPRelate", 
               "rio", 
+              "plyr",
               "tidyverse", 
               "org.Dm.eg.db", 
               "txtplot",
@@ -19,7 +20,8 @@ packages <- c("gdsfmt",
               "pointblank",
               "apeglm",
               "ashr", "dcgerard/vicar",
-              "furrr")
+              "furrr",
+              "qvalue")
 # pak::pkg_install(packages)
 packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)
