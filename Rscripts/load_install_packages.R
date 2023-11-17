@@ -21,7 +21,8 @@ packages <- c("gdsfmt",
               "apeglm",
               "ashr", "dcgerard/vicar",
               "furrr",
-              "qvalue")
+              "qvalue",
+              "ggblend")
 # pak::pkg_install(packages)
 packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)

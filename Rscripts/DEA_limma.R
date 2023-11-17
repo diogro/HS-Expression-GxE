@@ -29,6 +29,8 @@ DE_limma = function(data){
     list(table = res, lmfit = fit, eBayes = fit2, summary = summary(decideTests(fit2, p.value = 0.01)))
 }
 diff_expression = future_map(rnaseq_data, DE_limma)
+export(diff_expression, affix_date("cache/DE_limma.rds"))
+
 diff_expression |> map("summary")
 
 table = diff_expression |> 

@@ -17,21 +17,6 @@ Y <- X %*% B + Z %*% A + E
 mout <- mouthwash(Y = Y, X = X, k = k, cov_of_interest = 2,
                   include_intercept = FALSE)
 
-data = rnaseq_data$body
-mout <- mouthwash(Y = t(data$l2c), X = data$mod1, k = 1, cov_of_interest = 2,
-                  include_intercept = FALSE)
-names(mout)
-mout$Zhat
-residuals = getBatchResiduals(x = data$l2c, tissue = data$tissue, label = "l2c-mouthwash-1d",
-                              design = data$design, mod0 = data$mod0, sva = mout$Zhat, col = pull(data$covariates, treatment))
-
-data = rnaseq_data$body
-mout2 <- mouthwash(Y = t(data$l2c), X = data$mod1, k = 2, cov_of_interest = 2,
-                  include_intercept = FALSE)
-mout2$Zhat
-residuals = getBatchResiduals(x = data$l2c, tissue = data$tissue, label = "l2c-mouthwash-2d",
-                              design = data$design, mod0 = data$mod0, sva = mout2$Zhat, col = pull(data$covariates, treatment))
-
 table <- 
      list_rbind(list(head = mutate(rnaseq_data$head$mwash$l2c$result,
                                    Geneid = rownames(rnaseq_data$head$mwash$l2c$result)),
@@ -48,7 +33,25 @@ table = left_join(table,
              OrgDb = org.Dm.eg.db, 
              drop = FALSE),
         by = c(Geneid = "FLYBASE"))  %>% relocate(Geneid, SYMBOL)
-write_csv(table, affix_date("output/HS-ctrl-DE_vicar-head2-body2-table.csv"))
+write_csv(table, affix_date("output/HS-ctrl-DE_vicar-table.csv"))
+
+data = rnaseq_data$body
+mout2 <- mouthwash(Y = t(data$l2c), X = data$mod1, k = 2, cov_of_interest = 2,
+                   include_intercept = FALSE)
+
+table2 <- mutate(mout2$result,
+                Geneid = rownames(rnaseq_data$body$mwash$l2c$result),
+                tissue = "body") %>%
+     as_tibble 
+table2 = left_join(table2,
+        bitr(table$Geneid, 
+             fromType="FLYBASE", 
+             toType = "SYMBOL",
+             OrgDb = org.Dm.eg.db, 
+             drop = FALSE),
+        by = c(Geneid = "FLYBASE"))  %>% relocate(Geneid, SYMBOL, tissue)
+write_csv(table2, affix_date("output/HS-ctrl-DE_vicar_body-2ruv-table.csv"))
 
 
-
+mout2$result == 
+rnaseq_data$body$mwash$l2c$result

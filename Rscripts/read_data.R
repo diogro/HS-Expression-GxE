@@ -1,4 +1,4 @@
-source(here::here("Rscripts/load_install_packages.R"))
+source(here::here("Rscripts/functions.R"))
 
 ################
 # Read VCFs
@@ -164,7 +164,7 @@ makeResiduals <- function(data){
                                                       treatment = pull(covariates, treatment)))  
     data
 }
-options(future.globals.maxSize = 1e6 * 1024)
+options(future.globals.maxSize = 1e8 * 1024)
 rnaseq_data = future_map(rnaseq_data, makeResiduals)
 
 setMouthwash = function(data){
@@ -192,8 +192,8 @@ makeResidualsMwash <- function(data){
 }
 rnaseq_data = future_map(rnaseq_data, makeResidualsMwash)
 
-export(rnaseq_data, "cache/rnaseq_all.rds")
-export(covariates, "cache/covariates.rds")
+export(rnaseq_data, affix_date("cache/rnaseq_all.rds"))
+export(covariates, affix_date("cache/covariates.rds"))
 
 rnaseq_data <- import("cache/rnaseq_all.rds")
 covariates  <- import("cache/covariates.rds")

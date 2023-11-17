@@ -1,5 +1,7 @@
+source(here::here("Rscripts/functions.R"))
+
 results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2023-11-17.csv")),
-               vicar = import(here::here("output/HS-ctrl-DE_vicar-head2-body2-table_2023-11-17.csv"))) 
+               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2023-11-17.csv"))) 
 
 names(results$vicar)
 names(results$limma)
@@ -18,28 +20,41 @@ wide_table = table |>
 
 color_points = wide_table |> 
     filter(tissue == "head") %>%
-    filter(-log10(qvalue_vicar) > 10) |>
+    mutate(lqv = -log10(qvalue_vicar),
+           lql = -log10(qvalue_limma) ) %>%
+    mutate(type = case_when(
+            lql > 15 & lqv < 5 ~ "limma",
+            lql < 15 & lqv > 5 ~ "vicar",
+            lql > 15 & lqv > 5 ~ "both",
+            TRUE ~ NA
+  )) %>%
 bind_rows(wide_table |> 
     filter(tissue == "body") %>%
-    filter(-log10(qvalue_vicar) > 1.5))
+    mutate(lqv = -log10(qvalue_vicar),
+           lql = -log10(qvalue_limma) ) %>%
+    mutate(type = case_when(
+            lql > 15 & lqv < 1.5 ~ "limma",
+            lql < 15 & lqv > 1.5 ~ "vicar",
+            lql > 15 & lqv > 1.5 ~ "both",
+            TRUE ~ NA
+  ))) %>% filter(!is.na(type))
 
-png("tmp/effects_vicar-limma.png", width = 2000, height = 2000)
 p1 = ggplot(wide_table, aes(effect_limma, effect_vicar)) + 
-    geom_point(alpha= 0.3) + 
-    geom_point(data = color_points, 
-               alpha = 1, color = 2) + 
+    geom_point(alpha= 0.3, size = 0.3) + 
+        geom_point(data = color_points, size = 0.6,
+               alpha = 0.5, aes(color = type)) + 
     geom_abline(intercept = 0, slope = 1) +
     facet_wrap(~tissue) +
-    theme_cowplot() + theme(legend.position = "none") 
+    theme_bw() + theme(legend.position = "none") 
 p2 = ggplot(wide_table, aes(-log10(qvalue_limma), -log10(qvalue_vicar))) + 
-    geom_point(alpha= 0.3) + 
-    geom_point(data = color_points, 
-               alpha = 1, color = 2) + 
-    scale_color_manual(values = c("black", 2)) +
+    geom_point(alpha= 0.3, size = 0.3) + 
+    geom_point(data = color_points, size = 0.6,
+               alpha = 0.5, aes(color = type)) + 
     facet_wrap(~tissue, scales = "free_y") +
-    theme_cowplot() + theme(legend.position = "none") 
- (p1 + ggtitle("Effects")) / (p2 + ggtitle("qvalues"))
-dev.off()
+    theme_bw() + theme(legend.position = "none") 
+panel = (p1 + ggtitle("Effects")) / (p2 + ggtitle("qvalues"))
+save_plot("tmp/effects_vicar-limma.png",panel , base_width = 5, base_height = 7, nrow = 2, ncol = 2)
+
 
 
 table = results$vicar
@@ -92,6 +107,6 @@ names(table)
 {save_plot("tmp/DE_volcano_limma.png", p2, base_width = 7)}
 
 panel = (p1 + ggtitle("Vicar")) / (p2 + ggtitle("Limma/Voom"))
-save_plot("tmp/DE_volcano_limma-vs-viacar.png",panel , base_width = 7, base_height = 7)
+save_plot("tmp/DE_volcano_limma-vs-vicar.png",panel , base_width = 7, base_height = 7)
 
 
