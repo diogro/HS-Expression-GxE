@@ -1,10 +1,9 @@
 source(here::here("Rscripts/functions.R"))
 
 results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2023-11-17.csv")),
-               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2023-11-17.csv"))) 
+               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2023-11-17.csv")),
+               DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2023-11-18.csv"))) 
 
-names(results$vicar)
-names(results$limma)
 table = list_rbind(list(
     limma = results$limma |>
         dlply("tissue") |>
@@ -13,6 +12,11 @@ table = list_rbind(list(
         select(tissue, Geneid, SYMBOL, effect, qvalue),
     vicar = results$vicar |>
         rename(effect = PosteriorMean) |>
+        select(tissue, Geneid, SYMBOL, effect, qvalue),
+    DESeq = results$DESeq |>
+        dlply("tissue") |>
+        map(\(x) mutate(x, qvalue = qvalue(pvalue)$qvalue)) |> list_rbind() |>
+        rename( effect = log2FoldChange) |>
         select(tissue, Geneid, SYMBOL, effect, qvalue)), names_to = "method")
 
 wide_table = table |>
@@ -55,7 +59,28 @@ p2 = ggplot(wide_table, aes(-log10(qvalue_limma), -log10(qvalue_vicar))) +
 panel = (p1 + ggtitle("Effects")) / (p2 + ggtitle("qvalues"))
 save_plot("tmp/effects_vicar-limma.png",panel , base_width = 5, base_height = 7, nrow = 2, ncol = 2)
 
+x = "DESeq" 
+y = "vicar"
+t = "head"
+plotEffects <- function(x, y, t){
+    data  = filter(wide_table, tissue == t)
+    effect_x = rlang::sym(paste0("effect_", x))
+    effect_y = rlang::sym(paste0("effect_", y))
+    p = ggplot(data, aes(!!effect_x, !!effect_y)) + 
+        geom_point(alpha = 0.3, size = 0.5) +
+        geom_abline(intercept = 0, slope = 1) +
+        theme_bw() + theme(legend.position = "none") 
+    p
+}
 
+p = plotEffects("limma", "vicar", "body") + 
+    plotEffects("DESeq", "vicar", "body") + 
+    plotEffects("DESeq", "limma", "body")
+save_plot("tmp/test.png",p , base_width = 7, base_height = 7, ncol = 3)
+p2 = plotEffects("limma", "vicar", "head") + 
+    plotEffects("DESeq", "vicar", "head") +
+    plotEffects("DESeq", "limma", "head")
+save_plot("tmp/test.png",p2 , base_width = 7, base_height = 7, ncol = 3)
 
 table = results$vicar
 label_head = table |> 
@@ -110,3 +135,17 @@ panel = (p1 + ggtitle("Vicar")) / (p2 + ggtitle("Limma/Voom"))
 save_plot("tmp/DE_volcano_limma-vs-vicar.png",panel , base_width = 7, base_height = 7)
 
 
+
+
+x = results$vicar |>
+    dlply("tissue") |> 
+    map(\(x) slice_min(x, lfdr, n = 500)) |> 
+    map(\(x) mutate(x, n = 1:nrow(x))) |>
+    list_rbind() |>
+    select(n, Geneid, SYMBOL, tissue, lfdr)
+
+p = ggplot(x, aes(n, y = lfdr)) + 
+    geom_point() + 
+    facet_wrap(~tissue, scales = "free_y") +
+    theme_bw() #+ coord_cartesian(ylim = c(0, 1))
+save_plot("tmp/test.png",p , base_width = 7, base_height = 7, ncol = 2)
