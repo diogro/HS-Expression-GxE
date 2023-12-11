@@ -16,6 +16,3 @@ write.table(head_hs, here::here("SBM/rawData/batch/head-hs.tsv"), sep = "\t")
 
 write.table(body_ctrl, here::here("SBM/rawData/batch/body-ctrl.tsv"), sep = "\t")
 write.table(body_hs, here::here("SBM/rawData/batch/body-hs.tsv"), sep = "\t")
-
-
-
