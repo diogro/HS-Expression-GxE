@@ -4,3 +4,9 @@ cache/*
 tmp/*
 .nfs*
 *.gds
+eQTLmapping/.snakemake/
+eQTLmapping/logs/
+eQTLmapping/bed_files/
+eQTLmapping/GRMs/
+eQTLmapping/vcf_files/
+eQTLmapping/sample_list/

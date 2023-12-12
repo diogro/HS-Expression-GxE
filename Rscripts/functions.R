@@ -73,3 +73,34 @@ pca_plot = function(pca_resid, treatment = NULL){
     scale_color_manual(values = colors[1:length(unique(treatment))]) 
   plot
 }
+gt2num <- function(genomat) {
+  
+  if (!is.matrix(genomat)) {
+    stop("genomat parameter must be a matrix")
+  }
+
+  ## Define genotypes
+  refs <- c("0/0", "0|0")
+  alts <- c("1/1", "1|1")
+  hets <- c("0/1", "1/0", "0|1", "1|0")
+  misses <- c("./.", ".|.")
+  
+  ## Perform numeric substitution
+  genomat[genomat %in% refs] <- 0
+  genomat[genomat %in% alts] <- 2
+  genomat[genomat %in% hets] <- 1
+  genomat[genomat %in% misses] <- NA
+  
+  ## Record loci with > 2 alleles; remove from matrix
+  biallelic <- apply(genomat, 1, function(x) { all(x %in% c(NA, "0", "1", "2")) })
+  if (all(biallelic)) {
+    removed_loci <- NULL
+  } else {
+    removed_loci <- rownames(genomat)[!biallelic]
+    genomat <- genomat[biallelic, ]
+  }
+  
+  ## Construct and return output list
+  class(genomat) <- "numeric"
+  return(list("genomat" = genomat, "removed_loci" = removed_loci))
+}

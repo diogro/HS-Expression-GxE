@@ -1,0 +1,80 @@
+
+tissues = ["head", "body"]
+
+# Set the path to the Beagle executable
+beagle_executable = "/Genomics/argo/users/damelo/bin/beagle.22Jul22.46e.jar"
+
+rule all:
+    input:
+        expand("vcf_files/imputed/{sample}.imputed.vcf.gz", sample=tissues),
+        expand("bed_files/{sample}.bed", sample=tissues),
+        expand("sample_list/{sample}.txt", sample=tissues),
+        expand("GRMs/{sample}.cXX.txt", sample=tissues)
+
+rule beagle:
+    threads: 16
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 64000
+    log:
+        "logs/beagle/{sample}.log"
+    input:
+        vcf_file="vcf_files/{sample}.vcf"
+    output:
+        imputed_vcf="vcf_files/imputed/{sample}.imputed.vcf.gz"
+    params:
+        nthreads=16,  # Number of CPU threads to use
+        window=40                    # Window size for imputation (adjust as needed)
+    shell:
+        """
+        java -Xmx{resources.mem_mb}m -jar {beagle_executable} gt={input.vcf_file} out=vcf_files/imputed/{wildcards.sample}.imputed nthreads={params.nthreads} window={params.window}
+        """
+
+rule getVCFSamples:
+    input:
+        vcf_file="vcf_files/imputed/{sample}.imputed.vcf.gz"
+    output:
+        sample_file="sample_list/{sample}.txt"
+    shell:
+        """
+        mkdir -p sample_list
+        bcftools query -l {input.vcf_file} > sample_list/{wildcards.sample}.txt
+        """
+
+rule bed_files:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 64000
+    log:   
+        "logs/bed_files/{sample}.log"
+    input:
+        vcf_file="vcf_files/imputed/{sample}.imputed.vcf.gz"
+    output:
+        bed_file="bed_files/{sample}.bed",
+        bim_file="bed_files/{sample}.bim",
+        fam_file="bed_files/{sample}.fam"
+    shell:
+        """
+        mkdir -p bed_files
+        plink2 --vcf {input.vcf_file} --allow-extra-chr --make-bed --out bed_files/{wildcards.sample}
+        sed -i 's/-9/0/g' bed_files/{wildcards.sample}.fam
+        """
+
+rule GRM:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 64000
+    input:
+        bed_file="bed_files/{sample}.bed"
+    output:
+        grm="GRMs/{sample}.cXX.txt"
+    params:
+        num_threads=8  # Number of CPU threads to use
+    shell:
+        """
+        mkdir -p GRMs
+        gemma -bfile bed_files/{wildcards.sample} -gk 1 -o {wildcards.sample}
+        mv output/{wildcards.sample}* GRMs/
+        """
