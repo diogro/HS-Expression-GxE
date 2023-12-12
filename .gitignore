@@ -10,3 +10,6 @@ eQTLmapping/bed_files/
 eQTLmapping/GRMs/
 eQTLmapping/vcf_files/
 eQTLmapping/sample_list/
+V_folder/
+eQTLmapping/phenotypes/
+eQTLmapping/covariates/

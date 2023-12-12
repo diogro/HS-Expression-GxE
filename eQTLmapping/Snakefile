@@ -24,7 +24,7 @@ rule beagle:
         imputed_vcf="vcf_files/imputed/{sample}.imputed.vcf.gz"
     params:
         nthreads=16,  # Number of CPU threads to use
-        window=40                    # Window size for imputation (adjust as needed)
+        window=40     
     shell:
         """
         java -Xmx{resources.mem_mb}m -jar {beagle_executable} gt={input.vcf_file} out=vcf_files/imputed/{wildcards.sample}.imputed nthreads={params.nthreads} window={params.window}
@@ -78,3 +78,4 @@ rule GRM:
         gemma -bfile bed_files/{wildcards.sample} -gk 1 -o {wildcards.sample}
         mv output/{wildcards.sample}* GRMs/
         """
+
