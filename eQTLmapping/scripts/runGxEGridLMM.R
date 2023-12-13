@@ -1,14 +1,15 @@
 library(GridLMM)
 library(snpStats)
-library(tidyverse)
+library(dplyr)
 library(rio)
 library(poolr)
+library(qvalue)
 
 tissue = snakemake@wildcards[["tissue"]]
 current_gene = snakemake@wildcards[["gene"]]
 
-setwd("eQTLmapping")
-tissue = "head"
+# setwd("eQTLmapping")
+# tissue = "head"
 
 Xp = read.plink(paste0("bed_files/", tissue))
 X = as(Xp$genotypes,'numeric') 
@@ -27,19 +28,12 @@ global_formulas <- list(
      y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 +         (1|id)
 )
 
-runGxEmodel = function(current_gene, tissue, covariates, y, GRM){
+runGxEmodel = function(current_gene, tissue, covariates, GRM){
      cache_folder = paste0('cache/',
                            tissue, '/',
                            current_gene)
-     results_file = paste0(cache_folder, '/results.tsv')
-     if (file.exists(results_file)) {
-          results = import(results_file)
-          return(results)
-     }
-     if (!dir.exists(cache_folder)) {
-          dir.create(cache_folder, recursive = TRUE)
-     }
-     y = t(import(paste0("phenotypes/", tissue, ".tsv"), skip = which(genes == current_gene)-1, nrows = 1))
+     y = t(import(paste0("phenotypes/", tissue, ".tsv"), 
+                  skip = which(genes == current_gene)-1, nrows = 1))
      data = covariates |>
           mutate(y = y) |>
           as.data.frame()
@@ -63,22 +57,17 @@ runGxEmodel = function(current_gene, tissue, covariates, y, GRM){
                  p_main = p_value_REML.1,
                  p_gxe = p_value_REML.2) |>
           select(Trait, snp,  p_main, p_gxe) |>
-          mutate(p.adj_gxe = p.adjust(p_gxe, method = 'BY')) |>
+          mutate(p.adj_gxe = p.adjust(p_gxe, method = 'BY')) 
+     fdr_filtered = out_file |>     
           filter(p.adj_gxe < 0.1) |>
           as_tibble()
-     export(out_file, results_file)
-     if(nrow(out_file) > 0){
+     out_file = filter(out_file, p_gxe < 0.01) |>
+          as_tibble()
+     export(out_file,  snakemake@output[[1]])
+     if(nrow(fdr_filtered) > 0){
           detection_file = paste0("detections/", tissue, "/", current_gene, ".tsv")
-          export(out_file, detection_file)
+          export(fdr_filtered, detection_file)
      } 
-     return(results)
+     return()
 }
-
-runGxEmodel(genes[3], tissue, covariates, y, GRM)
-library(furrr)
-plan(multisession, workers = 32)
-options(future.globals.maxSize = 1e8 * 1024)
-results = future_map(genes[1:64], runGxEmodel, 
-                     tissue = tissue, 
-                     covariates = covariates,
-                     GRM = GRM)
+runGxEmodel(current_gene, tissue, covariates, GRM)

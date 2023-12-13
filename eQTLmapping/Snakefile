@@ -18,6 +18,11 @@ def get_genes(wildcards):
         genes = f.read().splitlines()
     return genes
 
+def get_output(wildcards):
+    tissue = get_tissue(wildcards)
+    genes = get_genes(tissue)
+    return ["results/gxe/{tissue}/{gene}.tsv".format(tissue=tissue, gene=gene) for gene in genes]
+
 rule all:
     input:
         expand("vcf_files/imputed/{tissue}.imputed.vcf.gz", tissue=tissues),
@@ -25,7 +30,7 @@ rule all:
         expand("sample_list/{tissue}.txt", tissue=tissues),
         expand("GRMs/{tissue}.cXX.txt", tissue=tissues), 
         expand("cache/Va.{tissue}.tsv", tissue=tissues),
-        expand("results/{tissue}/{gene}.tsv", tissue=tissues, gene = genes)
+        [get_output(tissue) for tissue in tissues]
 
 rule beagle:
     threads: 16
@@ -146,10 +151,10 @@ rule calcVa:
         "scripts/calcVa.R"
 
 rule runGxEGridLMM:
-    threads: 32
+    threads: 2
     resources:
         cores=lambda wc, threads: threads,
-        mem_mb=lambda wc, attempt: attempt * 32000
+        mem_mb=lambda wc, attempt: attempt * 16000
     input:
         grm="GRMs/{tissue}.cXX.txt",
         phenotypes="phenotypes/{tissue}.tsv",
@@ -157,6 +162,6 @@ rule runGxEGridLMM:
         gene_list="phenotypes/{tissue}.genes.txt",
         Va="cache/Va.{tissue}.tsv"
     output:
-        results="results/{tissue}/{gene}.tsv"
+        results="results/gxe/{tissue}/{gene}.tsv"
     script:
         "scripts/runGxEGridLMM.R"

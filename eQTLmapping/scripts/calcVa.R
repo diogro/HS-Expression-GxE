@@ -60,4 +60,4 @@ va_list = future_map(genes, runNullmodel,
 
 Va_df = data.frame(gene = genes,
                    Va = unlist(va_list))
-export(Va_df, snakeamke@output[["Va"]])
+export(Va_df, snakemake@output[["Va"]])
