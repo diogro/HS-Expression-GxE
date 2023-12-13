@@ -23,7 +23,8 @@ packages <- c("gdsfmt",
               "furrr",
               "qvalue",
               "ggblend", 
-              "deruncie/GridLMM")
+              "deruncie/GridLMM", 
+              "snpStats")
 # pak::pkg_install(packages)
 packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)

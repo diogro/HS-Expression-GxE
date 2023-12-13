@@ -9,7 +9,8 @@ rule all:
         expand("vcf_files/imputed/{tissue}.imputed.vcf.gz", tissue=tissues),
         expand("bed_files/{tissue}.bed", tissue=tissues),
         expand("sample_list/{tissue}.txt", tissue=tissues),
-        expand("GRMs/{tissue}.cXX.txt", tissue=tissues)
+        expand("GRMs/{tissue}.cXX.txt", tissue=tissues), 
+        expand("cache/Va.{tissue}.tsv", tissue=tissues)
 
 rule beagle:
     threads: 16
@@ -91,14 +92,11 @@ rule prepare_pheno:
         covariates="covariates/{tissue}.tsv",
         phenotypes="phenotypes/{tissue}.tsv",
         gene_list="phenotypes/{tissue}.genes.txt"
-
     script:
-        """
-        scripts/export_covariates.R 
-        """
+        "scripts/export_covariates.R"
 
 rule calcVa:
-    threads: 1
+    threads: 32
     resources:
         cores=lambda wc, threads: threads,
         mem_mb=lambda wc, attempt: attempt * 32000
@@ -108,8 +106,6 @@ rule calcVa:
         covariates="covariates/{tissue}.tsv",
         gene_list="phenotypes/{tissue}.genes.txt"
     output:
-        va="Va_cache/Va.tsv"
+        Va="cache/Va.{tissue}.tsv"
     script:
-        """
-        scripts/calcVa.R
-        """
+        "scripts/calcVa.R"
