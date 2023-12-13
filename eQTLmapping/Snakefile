@@ -142,6 +142,6 @@ rule runGxEGridLMM:
         gene_list="phenotypes/{tissue}.genes.txt",
         Va="cache/Va.{tissue}.tsv"
     output:
-        results="results/{tissue}.tsv"
+        results="detections/{tissue}/{sample}.tsv"
     script:
         "scripts/runGxEGridLMM.R"
