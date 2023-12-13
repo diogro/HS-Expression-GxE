@@ -6,10 +6,10 @@ beagle_executable = "/Genomics/argo/users/damelo/bin/beagle.22Jul22.46e.jar"
 
 rule all:
     input:
-        expand("vcf_files/imputed/{sample}.imputed.vcf.gz", sample=tissues),
-        expand("bed_files/{sample}.bed", sample=tissues),
-        expand("sample_list/{sample}.txt", sample=tissues),
-        expand("GRMs/{sample}.cXX.txt", sample=tissues)
+        expand("vcf_files/imputed/{tissue}.imputed.vcf.gz", tissue=tissues),
+        expand("bed_files/{tissue}.bed", tissue=tissues),
+        expand("sample_list/{tissue}.txt", tissue=tissues),
+        expand("GRMs/{tissue}.cXX.txt", tissue=tissues)
 
 rule beagle:
     threads: 16
@@ -17,65 +17,99 @@ rule beagle:
         cores=lambda wc, threads: threads,
         mem_mb=lambda wc, attempt: attempt * 64000
     log:
-        "logs/beagle/{sample}.log"
+        "logs/beagle/{tissue}.log"
     input:
-        vcf_file="vcf_files/{sample}.vcf"
+        vcf_file="vcf_files/{tissue}.vcf"
     output:
-        imputed_vcf="vcf_files/imputed/{sample}.imputed.vcf.gz"
+        imputed_vcf="vcf_files/imputed/{tissue}.imputed.vcf.gz"
     params:
         nthreads=16,  # Number of CPU threads to use
         window=40     
     shell:
         """
-        java -Xmx{resources.mem_mb}m -jar {beagle_executable} gt={input.vcf_file} out=vcf_files/imputed/{wildcards.sample}.imputed nthreads={params.nthreads} window={params.window}
+        java -Xmx{resources.mem_mb}m -jar {beagle_executable} gt={input.vcf_file} out=vcf_files/imputed/{wildcards.tissue}.imputed nthreads={params.nthreads} window={params.window}
         """
 
 rule getVCFSamples:
     input:
-        vcf_file="vcf_files/imputed/{sample}.imputed.vcf.gz"
+        vcf_file="vcf_files/imputed/{tissue}.imputed.vcf.gz"
     output:
-        sample_file="sample_list/{sample}.txt"
+        sample_file="sample_list/{tissue}.txt"
     shell:
         """
         mkdir -p sample_list
-        bcftools query -l {input.vcf_file} > sample_list/{wildcards.sample}.txt
+        bcftools query -l {input.vcf_file} > sample_list/{wildcards.tissue}.txt
         """
 
 rule bed_files:
     threads: 1
     resources:
         cores=lambda wc, threads: threads,
-        mem_mb=lambda wc, attempt: attempt * 64000
+        mem_mb=lambda wc, attempt: attempt * 32000
     log:   
-        "logs/bed_files/{sample}.log"
+        "logs/bed_files/{tissue}.log"
     input:
-        vcf_file="vcf_files/imputed/{sample}.imputed.vcf.gz"
+        vcf_file="vcf_files/imputed/{tissue}.imputed.vcf.gz"
     output:
-        bed_file="bed_files/{sample}.bed",
-        bim_file="bed_files/{sample}.bim",
-        fam_file="bed_files/{sample}.fam"
+        bed_file="bed_files/{tissue}.bed",
+        bim_file="bed_files/{tissue}.bim",
+        fam_file="bed_files/{tissue}.fam"
     shell:
         """
         mkdir -p bed_files
-        plink2 --vcf {input.vcf_file} --allow-extra-chr --make-bed --out bed_files/{wildcards.sample}
-        sed -i 's/-9/0/g' bed_files/{wildcards.sample}.fam
+        plink2 --vcf {input.vcf_file} --allow-extra-chr --make-bed --out bed_files/{wildcards.tissue}
+        sed -i 's/-9/0/g' bed_files/{wildcards.tissue}.fam
         """
 
 rule GRM:
     threads: 1
     resources:
         cores=lambda wc, threads: threads,
-        mem_mb=lambda wc, attempt: attempt * 64000
+        mem_mb=lambda wc, attempt: attempt * 32000
     input:
-        bed_file="bed_files/{sample}.bed"
+        bed_file="bed_files/{tissue}.bed"
     output:
-        grm="GRMs/{sample}.cXX.txt"
+        grm="GRMs/{tissue}.cXX.txt"
     params:
         num_threads=8  # Number of CPU threads to use
     shell:
         """
         mkdir -p GRMs
-        gemma -bfile bed_files/{wildcards.sample} -gk 1 -o {wildcards.sample}
-        mv output/{wildcards.sample}* GRMs/
+        gemma -bfile bed_files/{wildcards.tissue} -gk 1 -o {wildcards.tissue}
+        mv output/{wildcards.tissue}* GRMs/
         """
 
+rule prepare_pheno:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 32000
+    input:
+        rna_seq="../cache/rnaseq_all_2023-11-17.rds",
+        sample_list="sample_list/{tissue}.txt"
+    output:
+        covariates="covariates/{tissue}.tsv",
+        phenotypes="phenotypes/{tissue}.tsv",
+        gene_list="phenotypes/{tissue}.genes.txt"
+
+    script:
+        """
+        scripts/export_covariates.R 
+        """
+
+rule calcVa:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 32000
+    input:
+        grm="GRMs/{tissue}.cXX.txt",
+        phenotypes="phenotypes/{tissue}.tsv",
+        covariates="covariates/{tissue}.tsv",
+        gene_list="phenotypes/{tissue}.genes.txt"
+    output:
+        va="Va_cache/Va.tsv"
+    script:
+        """
+        scripts/calcVa.R
+        """

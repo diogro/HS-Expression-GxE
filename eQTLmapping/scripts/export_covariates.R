@@ -1,10 +1,11 @@
 library(rio)
 library(tidyverse)
 
-rna_seq_file = "cache/rnaseq_all_2023-11-17.rds"
+# rna_seq_file = "cache/rnaseq_all_2023-11-17.rds"
+rna_seq_file = snakemake@wildcards[["tissue"]]
 
 for(tissue in c("head", "body")){
-     sample_list_file = paste0("eQTLmapping/sample_list/", tissue, ".txt")
+     sample_list_file = snakemake@input[["sample_list"]]
 
      all_data = import(rna_seq_file)
 
@@ -20,7 +21,8 @@ for(tissue in c("head", "body")){
 
      stopifnot(all(input_df$id == samples))
      phenos = data$l2c[,samples]
-     write.table(rownames(phenos), paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt"), row.names = FALSE, col.names = FALSE, quote = FALSE, sep = "\t")
-     export(input_df, paste0("eQTLmapping/covariates/", tissue, ".tsv"))
-     export(phenos, paste0("eQTLmapping/phenotypes/", tissue, ".tsv"))
+     write.table(rownames(phenos), snakemake@output[["gene_list"]], 
+                 row.names = FALSE, col.names = FALSE, quote = FALSE, sep = "\t")
+     export(input_df, snakemake@output[["covariates"]])
+     export(phenos, snakemake@output[["phenotypes"]])
 }

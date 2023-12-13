@@ -13,3 +13,4 @@ eQTLmapping/sample_list/
 V_folder/
 eQTLmapping/phenotypes/
 eQTLmapping/covariates/
+eQTLmapping/Va_cache/Va.tsv
