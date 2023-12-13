@@ -5,6 +5,7 @@ library(rio)
 library(poolr)
 
 tissue = snakemake@wildcards[["tissue"]]
+current_gene = snakemake@wildcards[["gene"]]
 
 setwd("eQTLmapping")
 tissue = "head"
