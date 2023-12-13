@@ -25,7 +25,7 @@ pca <- function(x, space = c("rows", "columns"),
     pc <- t(pc)
     loading <- t(loading)
   }
-  return(list(pc = pc, loading = loading, pve = pve))
+  return(list(pc = pc, loading = loading, pve = pve, d = s$d^2))
 }
 pca_plot_outliers = function(resids, color = NULL){
   pca_resid = pca(resids)

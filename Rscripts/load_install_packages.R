@@ -24,7 +24,8 @@ packages <- c("gdsfmt",
               "qvalue",
               "ggblend", 
               "deruncie/GridLMM", 
-              "snpStats")
+              "snpStats", 
+              "ozancinar/poolr")
 # pak::pkg_install(packages)
 packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)

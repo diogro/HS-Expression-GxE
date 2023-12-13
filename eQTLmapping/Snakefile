@@ -80,6 +80,26 @@ rule GRM:
         mv output/{wildcards.tissue}* GRMs/
         """
 
+rule eigenGRM:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 32000
+    input:
+        bed_file="bed_files/{tissue}.bed",
+        grm="GRMs/{tissue}.cXX.txt"
+    output:
+        eigD="GRMs/{tissue}.eigenD.txt",
+        eigU="GRMs/{tissue}.eigenU.txt"
+    params:
+        num_threads=8  # Number of CPU threads to use
+    shell:
+        """
+        mkdir -p GRMs
+        gemma -bfile bed_files/{wildcards.tissue} -k {input.grm} -eigen -o {wildcards.tissue}
+        mv output/{wildcards.tissue}* GRMs/
+        """
+
 rule prepare_pheno:
     threads: 1
     resources:
@@ -109,3 +129,19 @@ rule calcVa:
         Va="cache/Va.{tissue}.tsv"
     script:
         "scripts/calcVa.R"
+
+rule runGxEGridLMM:
+    threads: 32
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 32000
+    input:
+        grm="GRMs/{tissue}.cXX.txt",
+        phenotypes="phenotypes/{tissue}.tsv",
+        covariates="covariates/{tissue}.tsv",
+        gene_list="phenotypes/{tissue}.genes.txt",
+        Va="cache/Va.{tissue}.tsv"
+    output:
+        results="results/{tissue}.tsv"
+    script:
+        "scripts/runGxEGridLMM.R"
