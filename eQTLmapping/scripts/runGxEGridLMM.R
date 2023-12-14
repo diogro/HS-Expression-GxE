@@ -69,7 +69,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
           as_tibble()
      export(out_file,  snakemake@output[[1]])
      if(nrow(fdr_filtered) > 0){
-          detection_file = paste0("detections/", tissue, "/", current_gene, ".tsv")
+          detection_file = paste0("detections/gxe/", tissue, "/", current_gene, ".tsv")
           export(fdr_filtered, detection_file)
      } 
      return()
