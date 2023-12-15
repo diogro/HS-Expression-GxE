@@ -50,7 +50,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
                              relmat = list(id = list(K = GRM)),
                              V_setup = V_setup,
                              method = 'REML',
-                             mc.cores = 2,
+                             mc.cores = 1,
                              verbose = T)
      results = gxe_gwas$results
      out_file = results |>
@@ -75,3 +75,4 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      return()
 }
 runGxEmodel(current_gene, tissue, covariates, GRM)
+cat("Done!")
