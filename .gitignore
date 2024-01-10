@@ -17,3 +17,7 @@ eQTLmapping/Va_cache/Va.tsv
 eQTLmapping/cache
 eQTLmapping/results/
 eQTLmapping/detections/
+GxE_h2/gxemm_tmp_*
+GxE_h2/logs/
+GxE_h2/.ipynb_checkpoints/
+output/GxEMM/
