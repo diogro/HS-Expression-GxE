@@ -18,10 +18,15 @@ def get_genes(wildcards):
         genes = f.read().splitlines()
     return genes
 
-def get_output(wildcards):
+def get_output_gxe(wildcards):
     tissue = get_tissue(wildcards)
     genes = get_genes(tissue)
     return ["results/gxe/{tissue}/{gene}.tsv".format(tissue=tissue, gene=gene) for gene in genes]
+
+def get_output_eqtl(wildcards):
+    tissue = get_tissue(wildcards)
+    genes = get_genes(tissue)
+    return ["results/eqtl/{tissue}/{gene}.tsv".format(tissue=tissue, gene=gene) for gene in genes]
 
 rule all:
     input:
@@ -30,7 +35,8 @@ rule all:
         expand("sample_list/{tissue}.txt", tissue=tissues),
         expand("GRMs/{tissue}.cXX.txt", tissue=tissues), 
         expand("cache/Va.{tissue}.tsv", tissue=tissues),
-        [get_output(tissue) for tissue in tissues]
+        [get_output_gxe(tissue) for tissue in tissues],
+        [get_output_eqtl(tissue) for tissue in tissues]
 
 rule beagle:
     threads: 16
@@ -165,3 +171,19 @@ rule runGxEGridLMM:
         results="results/gxe/{tissue}/{gene}.tsv"
     script:
         "scripts/runGxEGridLMM.R"
+
+rule runGridLMM:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 75000
+    input:
+        grm="GRMs/{tissue}.cXX.txt",
+        phenotypes="phenotypes/{tissue}.tsv",
+        covariates="covariates/{tissue}.tsv",
+        gene_list="phenotypes/{tissue}.genes.txt",
+        Va="cache/Va.{tissue}.tsv"
+    output:
+        results="results/eqtl/{tissue}/{gene}.tsv"
+    script:
+        "scripts/runGridLMM.R"
