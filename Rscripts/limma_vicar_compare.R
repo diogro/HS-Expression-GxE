@@ -1,8 +1,8 @@
 source(here::here("Rscripts/functions.R"))
 
-results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2023-11-17.csv")),
-               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2023-11-17.csv")),
-               DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2023-11-18.csv"))) 
+results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-03-21.csv")),
+               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2024-03-21.csv")),
+               DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2024-03-21.csv"))) 
 
 table = list_rbind(list(
     limma = results$limma |>

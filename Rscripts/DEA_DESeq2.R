@@ -1,6 +1,6 @@
 source(here::here("Rscripts/functions.R"))
 
-rnaseq_data = import("cache/rnaseq_all.rds")
+rnaseq_data = import("cache/rnaseq_all_2024-03-21.rds")
 
 data = rnaseq_data$head
 
@@ -43,7 +43,7 @@ DE_DESeq2 <- function(data){
 }
 diff_expression = map(rnaseq_data, DE_DESeq2)
 export(diff_expression, affix_date("cache/DE_DESeq2.rds"))
-diff_expression = import("cache/DE_DESeq2_2023-11-17.rds")
+diff_expression = import("cache/DE_DESeq2_2024-03-21.rds")
 
 table = diff_expression |> 
     map("table") |> 

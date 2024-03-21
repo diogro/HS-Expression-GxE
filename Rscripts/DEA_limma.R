@@ -1,8 +1,6 @@
 source(here::here("Rscripts/functions.R"))
 
-rnaseq_data = import("cache/rnaseq_all.rds")
-
-data = rnaseq_data$body
+rnaseq_data = import("cache/rnaseq_all_2024-03-21.rds")
 
 DE_limma = function(data){
     design <- model.matrix(~0+treatment + 
