@@ -18,6 +18,8 @@ snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
 # Read covariates for all samples
 ################
 
+target_gene = "FBgn0038484"
+
 covariates = bind_rows(head = import("data/GXEpaper/ALLDATA/UsefulPairs_DNA_RNA_heads_noOutliers_Mar3.20.txt"), 
                        body = import("data/GXEpaper/ALLDATA/UsefulPairs_DNA_RNA_body_noOutliers_Feb6.20.txt"),
                        .id = "tissue") |> 
@@ -37,17 +39,12 @@ countdata = list(head = read.table("data/GXEpaper/ALLDATA/Allgenecounts_DNA_RNA_
                  body = read.table("data/GXEpaper/ALLDATA/Allgenecounts_DNA_RNA_body_noOutliers_Jun1.20.txt", 
                                    header=T, check.names=F) %>% mutate(Geneid = rownames(.)) %>% relocate(Geneid))
 
-filterGenes <- function(countdata.norm){
+filterGenes <- function(countdata.norm, current_tissue, covariates){
     print(paste("Total genes:", nrow(countdata.norm$genes)))
-    # Removing genes where max expression is less than 1 cpm
-    max_cpm = apply(cpm(countdata.norm), 1, max)
-    drop <- which(max_cpm < 1)
-    print(length(drop))
-    countdata.norm <- countdata.norm[-drop, ]
-
+    
     # Removing genes with average expression less than 1 cpm
     mean_cpm = apply(cpm(countdata.norm), 1, mean)
-    drop <- which(mean_cpm < 1)
+    drop <- which(mean_cpm < 5)
     print(length(drop))
     countdata.norm <- countdata.norm[-drop, ]
 
@@ -55,11 +52,18 @@ filterGenes <- function(countdata.norm){
     mean_count = apply(countdata.norm$counts, 1, mean)
     drop <- which(mean_count < 10)
     print(length(drop))
-    countdata.norm <- countdata.norm[-drop, ]
+    if(length(drop) > 0){
+        countdata.norm <- countdata.norm[-drop, ]
+    }
 
-    # Removing genes with expression less than 1 cpm is more than 20% of the samples
-    prop_non_expressed = apply(cpm(countdata.norm), 1, \(x) sum(x < 1)) / nrow(countdata.norm$samples)
-    drop <- which(prop_non_expressed > 0.2)
+    cov = filter(covariates, tissue == current_tissue) |> 
+              filter(id %in% rownames(countdata.norm$samples)) |>
+              arrange(match(id, rownames(countdata.norm$samples)))
+
+    # Removing genes with expression less than 1 cpm in more than 20% of the samples
+    prop_non_expressed_hs   = apply(cpm(countdata.norm[,cov$treatment == 1]), 1, \(x) sum(x < 1)) / sum(cov$treatment == 1)
+    prop_non_expressed_ctrl = apply(cpm(countdata.norm[, cov$treatment == 0]), 1, \(x) sum(x < 1)) / sum(cov$treatment == 0)
+    drop <- which(prop_non_expressed_ctrl > 0.2 & prop_non_expressed_hs > 0.2)
     print(length(drop))
     countdata.norm <- countdata.norm[-drop, ]
 
@@ -67,11 +71,9 @@ filterGenes <- function(countdata.norm){
     countdata.norm
 }
 
-DGEList
 y <- map(countdata, DGEList)
 y <- map(y, calcNormFactors)
-y.filtered <- map(y, filterGenes)
-
+y.filtered <- map2(y, names(y), filterGenes, covariates)
 
 #################
 # Set model matrices
@@ -140,6 +142,7 @@ setSVA = function(data){
                              \(x, y) sva(x, data$mod1, data$mod0, n.sv=y, method = "two-step"))
      data
 }
+options(future.globals.maxSize = 1e8 * 1024)
 rnaseq_data = map(rnaseq_data, setSVA)
 
 getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatment){

@@ -2,6 +2,7 @@
 tissues = ["head", "body"]
 
 # Set the path to the Beagle executable
+# TODO: 
 beagle_executable = "/Genomics/argo/users/damelo/bin/beagle.22Jul22.46e.jar"
 
 def get_tissue(wildcards):
@@ -35,8 +36,9 @@ rule all:
         expand("sample_list/{tissue}.txt", tissue=tissues),
         expand("GRMs/{tissue}.cXX.txt", tissue=tissues), 
         expand("cache/Va.{tissue}.tsv", tissue=tissues),
-        [get_output_gxe(tissue) for tissue in tissues],
-        [get_output_eqtl(tissue) for tissue in tissues]
+        # TODO: Add them back once we're happy with prior steps
+        # [get_output_gxe(tissue) for tissue in tissues],
+        # [get_output_eqtl(tissue) for tissue in tissues]
 
 rule beagle:
     threads: 16
@@ -132,7 +134,8 @@ rule prepare_pheno:
         cores=lambda wc, threads: threads,
         mem_mb=lambda wc, attempt: attempt * 32000
     input:
-        rna_seq="../cache/rnaseq_all_2023-11-17.rds",
+    # TODO: Hardcoded path
+        rna_seq="../cache/rnaseq_all_2024-03-21.rds",
         sample_list="sample_list/{tissue}.txt"
     output:
         covariates="covariates/{tissue}.tsv",

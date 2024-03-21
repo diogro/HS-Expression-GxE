@@ -1,7 +1,7 @@
 library(rio)
 source("Rscripts/functions.R")
 
-rnaseq_data = import("cache/rnaseq_all_2023-11-17.rds")
+rnaseq_data = import("cache/rnaseq_all_2024-03-21.rds")
 
 treatment = pull(rnaseq_data$head$covariates, treatment)
 head_ctrl = rnaseq_data$head$mwash_residuals$l2c[,treatment == 0]
@@ -16,3 +16,9 @@ write.table(head_hs, here::here("SBM/rawData/batch/head-hs.tsv"), sep = "\t")
 
 write.table(body_ctrl, here::here("SBM/rawData/batch/body-ctrl.tsv"), sep = "\t")
 write.table(body_hs, here::here("SBM/rawData/batch/body-hs.tsv"), sep = "\t")
+
+write.table(head_ctrl, here::here("SBM/rawData/layered/head/ctrl.tsv"), sep = "\t")
+write.table(head_hs, here::here("SBM/rawData/layered/head/hs.tsv"), sep = "\t")
+
+write.table(body_ctrl, here::here("SBM/rawData/layered/body/ctrl.tsv"), sep = "\t")
+write.table(body_hs, here::here("SBM/rawData/layered/body/hs.tsv"), sep = "\t")
