@@ -37,8 +37,8 @@ rule all:
         expand("GRMs/{tissue}.cXX.txt", tissue=tissues), 
         expand("cache/Va.{tissue}.tsv", tissue=tissues),
         # TODO: Add them back once we're happy with prior steps
-        # [get_output_gxe(tissue) for tissue in tissues],
-        # [get_output_eqtl(tissue) for tissue in tissues]
+        [get_output_gxe(tissue) for tissue in tissues],
+        [get_output_eqtl(tissue) for tissue in tissues]
 
 rule beagle:
     threads: 16
