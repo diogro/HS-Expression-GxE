@@ -1,26 +1,43 @@
 source(here::here("Rscripts/functions.R"))
 
-DiffExpAll = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2023-11-17.csv")),
-                  vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2023-11-17.csv")),
-                  DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2023-11-18.csv"))) 
+DiffExpAll = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-03-21.csv")),
+                  vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2024-03-21.csv")),
+                  DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2024-03-21.csv"))) 
 
 DiffExp = DiffExpAll$vicar %>% filter(tissue == "head") %>% as_tibble()
 
-DiffExp$Geneid[DiffExp$Geneid == "FBgn0085200"]
+head = import(here::here("SBM/snakemake-layer/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))
 
-hs = import("SBM/snakemake/cache/blockSummary/fdr-1e-3/head-hs/gene_block.csv")
-ctrl = import("SBM/snakemake/cache/blockSummary/fdr-1e-3/head-ctrl/gene_block.csv")
+block_summary = import(here::here("SBM/snakemake-layer/cache/GO/fdr-1e-3/layered/head/blockSummary.csv")) %>% filter(Nested_Level == 2) %>% mutate(is_enriched = n_enrich != 0)
 
-block_summary = import("SBM/snakemake/cache/GO/fdr-1e-3/head-ctrl/block_summary.csv") %>% filter(Nested_Level == 2) %>% mutate(is_enriched = n_enrich != 0)
-
-DiffSBM = inner_join(DiffExp, select(ctrl, Gene, B2), by = join_by(Geneid == Gene)) %>% 
+DiffSBM = inner_join(DiffExp, select(head, Gene, B2), by = join_by(Geneid == Gene)) %>% 
     inner_join(block_summary, by = join_by(B2 == Block))
 
-block_median = inner_join(DiffExp, select(ctrl, Gene, B2), by = join_by(Geneid == Gene)) %>%   
+block_median = inner_join(DiffExp, select(head, Gene, B2), by = join_by(Geneid == Gene)) %>%   
    group_by(B2) %>% dplyr::summarize(median = median(-log(lfdr))) %>% arrange(desc(median))
 block_median$B2 = factor(block_median$B2, levels = block_median$B2)   
 DiffSBM$B2 = factor(DiffSBM$B2, levels = block_median$B2)
+DE_blocks = block_median[block_median$median > 5,]
 
+DiffSBM_DE_blocks = DiffSBM %>% filter(B2 %in% DE_blocks$B2)
+all_corrs = import(here::here("cache/long_corrs.csv")) 
+DE_genes = DiffSBM_DE_blocks$Geneid
+gene1_DE = all_corrs$Gene1 %in% DE_genes
+gene2_DE = all_corrs$Gene2 %in% DE_genes
+all_corrs$DE = gene1_DE & gene2_DE
+DE_corrs = filter(all_corrs, DE) |> select(-DE)
+
+classifyCorrBlock = function(x, blockSummary, level){   
+    block_col = paste("B", level, sep = "")
+    gene1_block = blockSummary[[block_col]][match(x$Gene1, blockSummary$Gene)]
+    gene2_block = blockSummary[[block_col]][match(x$Gene2, blockSummary$Gene)]
+    return(gene1_block == gene2_block)
+}
+DE_corrs$B2 = classifyCorrBlock(DE_corrs, head_blocks, 2)
+p = pivot_longer(DE_corrs, ctrl:hs, names_to = "treatment", values_to =  "correlation") |>
+    ggplot(aes(B2, correlation, fill = treatment, group = interaction(treatment, B2))) + 
+    geom_boxplot() 
+save_plot(here::here("output/corrTreatmentSBM.png"), p, base_width = 10, base_height = 6)
 
 p = DiffSBM %>%
     ggplot(aes(B2, -log(lfdr), group = B2)) + 
