@@ -74,15 +74,14 @@ gene_expr_concat = pd.concat([gene_expr[0], gene_expr[1]],
                    axis=0, 
                    keys=input_names,
                    names=['source']).reset_index(level=[0])
-gene_expr_concat
-# remove first column
+
+# Extract source column
+source = gene_expr_concat['source']
 ge = gene_expr_concat.drop(columns=['source'])
 
 print('Normalizing gene expression data...')
 z_scores = (ge - ge.mean()) / np.sqrt(ge.var())
 
-# Extract source column
-source = gene_expr_concat['source']
 
 
 # Model matrix
@@ -115,6 +114,6 @@ g.edge_properties["clip_c"] = clip_c
 g.edge_properties["clip_p"] = clip_p
 
 print('Saving graph...')
-g.save('clip_g_head.xml.gz')
+g.save('clip_g_' + current_tissue +  '.xml.gz')
 
 print('Done!')
