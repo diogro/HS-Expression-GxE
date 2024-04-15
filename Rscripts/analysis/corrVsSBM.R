@@ -16,10 +16,15 @@ table(DiffExp$lfdr < 1e-4)
 DiffExp$Geneid[DiffExp$Geneid == "FBgn0038484"]
 any(DE_genes == "FBgn0038484")
 
-head_blocks = import(here::here("SBM/snakemake-layer/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))
+head_blocks = import(here::here("SBM/snakemake/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))
 
 res_exp = list(ctrl = read.table(here::here("SBM/rawData/batch/head-ctrl.tsv"), sep = "\t"),
                hs = read.table(here::here("SBM/rawData/batch/head-hs.tsv"), sep = "\t"))
+
+clip_df = import(here::here("cache/clip_fdr-1e2_head.csv")) |>
+    filter(Degree > 50)
+clip_genes = unique(clip_df$Gene)
+length(clip_genes)
 
 corrMatrices = list(ctrl = cor(t(res_exp$ctrl), method = "spearman"),
                     hs = cor(t(res_exp$hs), method = "spearman"))
@@ -39,6 +44,7 @@ df_corrs = data.frame(long_corrMatrices$ctrl[,1:2],
                       rename("Gene1" = "row", "Gene2" = "col") %>%
                       as_tibble()
 export(df_corrs, here::here("cache/long_corrs.csv"))
+df_corrs = import(here::here("cache/long_corrs.csv"))
 
 classifyCorrBlock = function(x, blockSummary, level){   
     block_col = paste("B", level, sep = "")
@@ -48,8 +54,8 @@ classifyCorrBlock = function(x, blockSummary, level){
 }
 
 df_corrs$B2 = classifyCorrBlock(df_corrs, head_blocks, 2)
-gene1_DE = df_corrs$Gene1 %in% DE_genes
-gene2_DE = df_corrs$Gene2 %in% DE_genes
+gene1_DE = df_corrs$Gene1 %in% clip_genes
+gene2_DE = df_corrs$Gene2 %in% clip_genes
 df_corrs$DE = gene1_DE & gene2_DE
 table(df_corrs$DE)
 # p = ggplot(df_corrs, aes(x = ctrl, y = hs)) + 
@@ -70,8 +76,8 @@ p = ggplot(df_corrs, aes(x = ctrl, y = hs, group = interaction(DE, B2))) +
         geom_vline(xintercept = 0, linetype = "dashed") +
         facet_grid(B2~DE, labeller = labeller(B2 = c("FALSE" = "Between level-2 blocks", 
                                                    "TRUE" = "Within level-2 blocks"),
-                                              DE = c("FALSE" = "Not DE", 
-                                                     "TRUE" = paste0("DE - ", length(DE_genes), " genes")))) +
+                                              DE = c("FALSE" = "Not Clip", 
+                                                     "TRUE" = paste0("Clip - ", length(clip_genes), " genes")))) +
         theme_classic(12) + labs(x = "Correlation (ctrl)", y = "Correlation (hs)")
     
-save_plot(here::here("output/corrVsDE.png"), p, base_width = 10, base_height = 6)
+save_plot(here::here("output/corrVsSigClip.png"), p, base_width = 10, base_height = 6)
