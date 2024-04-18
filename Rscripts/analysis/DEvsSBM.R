@@ -6,9 +6,16 @@ DiffExpAll = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-
 
 DiffExp = DiffExpAll$vicar %>% filter(tissue == "head") %>% as_tibble()
 
-head = import(here::here("SBM/snakemake-layer/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))
+head = import(here::here("SBM/snakemake/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))
+block_summary_clip = import(here::here("cache/blockSummary_clip_fdr-1e2_head.csv"))
 
-block_summary = import(here::here("SBM/snakemake-layer/cache/GO/fdr-1e-3/layered/head/blockSummary.csv")) %>% filter(Nested_Level == 2) %>% mutate(is_enriched = n_enrich != 0)
+block_summary = import(here::here("SBM/snakemake/cache/GO/fdr-1e-3/layered/head/blockSummary.csv")) 
+
+block_summary_clip = import(here::here("cache/blockSummary_clip_fdr-1e2_head.csv"))
+block_summary_clip = block_summary_clip |> 
+    filter(Nested_Level == 1, Direction == "decohere") |>
+    arrange(Nested_Level, desc(Total_degree))
+head(block_summary_clip, 20)
 
 DiffSBM = inner_join(DiffExp, select(head, Gene, B2), by = join_by(Geneid == Gene)) %>% 
     inner_join(block_summary, by = join_by(B2 == Block))
