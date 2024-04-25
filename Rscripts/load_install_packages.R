@@ -16,6 +16,8 @@ packages <- c("gdsfmt",
               "viridis",
               "patchwork", 
               "ggrepel", 
+              "ggthemes",
+              "ggeasy", 
               "clusterProfiler", 
               "pointblank",
               "apeglm",
@@ -25,7 +27,8 @@ packages <- c("gdsfmt",
               "ggblend", 
               "deruncie/GridLMM", 
               "snpStats", 
-              "ozancinar/poolr")
+              "ozancinar/poolr",
+              "hexbin")
 # pak::pkg_install(packages)
 packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)
