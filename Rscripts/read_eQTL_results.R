@@ -1,12 +1,17 @@
 source(here::here("Rscripts/functions.R"))
 
+# pak::pkg_install("TxDb.Dmelanogaster.UCSC.dm6.ensGene")
+library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
+txdb = TxDb.Dmelanogaster.UCSC.dm6.ensGene
+tx <- transcripts(txdb, columns = "gene_id")
+
 chrs <- c("2L", "2R", "3L", "3R", "4", "X")
 
 detection_files = list(head = dir(here::here("eQTLmapping/detections/gxe/head")),
                           body = dir(here::here("eQTLmapping/detections/gxe/body")))              
 gxe_genes = lapply(detection_files, function(x) gsub(".tsv", "", x)) 
 
-tissue = 'body'
+tissue = 'head'
 
 Xp = read.plink(here::here(paste0("eQTLmapping/bed_files/", tissue)))
 X = as(Xp$genotypes,'numeric') 
@@ -16,7 +21,8 @@ colnames(X) = Xp$map$snp.name
 covariates = import(here::here(paste0("eQTLmapping/covariates/", tissue, ".tsv")))
 GRM = import(here::here(paste0("eQTLmapping/GRMs/", tissue, ".cXX.txt")), header = FALSE)
 colnames(GRM) = rownames(GRM) = covariates$id
-genes = gxe_genes[[tissue]]
+genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt")), header = FALSE)[,1]
+gxe_genes = gxe_genes[[tissue]]
 
 current_gene = genes[100]
 
@@ -66,21 +72,26 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      return(out_file)
 }
 
-results = vector("list", length = length(genes))
+results = vector("list", length = length(gxe_genes))
 k = 1
 
-
-for(i in k:length(genes)){
-    print(paste0("Current gene: ", genes[i], " Percent: ", 100*round(i/length(genes), 3), "%"))
-    results[[k]] = runGxEmodel(genes[i], tissue, covariates, GRM)
+for(i in k:length(gxe_genes)){
+    print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
+    results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
     k = k + 1
 }
 export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
+results = import(here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds"))) 
+
+x = results[[1]]
+any(x$q_gxe < 0.1)
+
+
 signCut <- 1e-4
 
 # Make a manhattan plot
 res = results[[1]]
-gene = genes[1]
+gene = gxe_genes[1]
 plotManhattan <- function(res, gene, signCut, tissue){
     res = res |>
         mutate(log_p_gxe = -log10(p_gxe)) |>
