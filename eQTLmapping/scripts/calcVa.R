@@ -4,11 +4,16 @@ library(dplyr)
 
 tissue = snakemake@wildcards[["tissue"]]
 
-covariates = import(paste0("covariates/", tissue, ".tsv"))
+covariates = import(paste0("covariates/", tissue, ".tsv")) |>
+     mutate(egglayBatch = as.character(egglayBatch), 
+            RNAseqBatch = as.character(RNAseqBatch),
+            platingBatch = as.character(platingBatch),
+            RNAlibBatch = as.character(RNAlibBatch))
+
 GRM = import(paste0("GRMs/", tissue, ".cXX.txt"), header = FALSE)
 colnames(GRM) = rownames(GRM) = covariates$id
-phenos = import(paste0("phenotypes/", tissue, ".tsv"))
 genes = import(paste0("phenotypes/", tissue, ".genes.txt"), header = FALSE)[,1]
+phenos = import(paste0("phenotypes/", tissue, ".tsv"))
 
 rownames(phenos) = genes
 phenos = t(phenos)

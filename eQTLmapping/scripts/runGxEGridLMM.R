@@ -16,12 +16,16 @@ X = as(Xp$genotypes,'numeric')
 rownames(X) = Xp$fam$member
 colnames(X) = Xp$map$snp.name
 
-covariates = import(paste0("covariates/", tissue, ".tsv"))
+covariates = import(paste0("covariates/", tissue, ".tsv")) |>
+     mutate(egglayBatch = as.character(egglayBatch), 
+            RNAseqBatch = as.character(RNAseqBatch),
+            platingBatch = as.character(platingBatch),
+            RNAlibBatch = as.character(RNAlibBatch))
 GRM = import(paste0("GRMs/", tissue, ".cXX.txt"), header = FALSE)
 colnames(GRM) = rownames(GRM) = covariates$id
 genes = import(paste0("phenotypes/", tissue, ".genes.txt"), header = FALSE)[,1]
 
-# current_gene = genes[100]
+# current_gene = genes[1]
 
 global_formulas <- list(
           head = 
@@ -33,16 +37,16 @@ global_formulas <- list(
 runGxEmodel = function(current_gene, tissue, covariates, GRM){
      cache_folder = paste0('cache/',
                            tissue, '/',
-                           current_gene)
+                           current_gene);
      y = t(import(paste0("phenotypes/", tissue, ".tsv"), 
-                  skip = which(genes == current_gene)-1, nrows = 1))
+                  skip = which(genes == current_gene), nrows = 1))
      data = covariates |>
           mutate(y = y) |>
           as.data.frame()
      rownames(data) = data$id
      V_setup = import(paste0(cache_folder, '/V_setup.rds'))
      gxe_gwas = GridLMM_GWAS(formula = global_formulas[[tissue]],
-                             test_formula =  ~1 + treatment,
+                             test_formula =  ~ 1 + treatment, s
                              reduced_formula = ~1,
                              data = data,
                              X = X,

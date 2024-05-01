@@ -1,4 +1,8 @@
 source(here::here("Rscripts/functions.R"))
+pak::pkg_install("PhenotypeSimulator")
+library(PhenotypeSimulator)
+
+rnaseq = import(here::here("cache/rnaseq_all_2024-03-21.rds"))
 
 # pak::pkg_install("TxDb.Dmelanogaster.UCSC.dm6.ensGene")
 library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
@@ -31,6 +35,12 @@ global_formulas <- list(
      y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2 + (1|id),
           body = 
      y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 +         (1|id)
+)
+global_formulas_gemma <- list(
+          head = 
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2,
+          body = 
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat
 )
 
 runGxEmodel = function(current_gene, tissue, covariates, GRM){
@@ -72,15 +82,61 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      return(out_file)
 }
 
-results = vector("list", length = length(gxe_genes))
-k = 1
-
-for(i in k:length(gxe_genes)){
-    print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
-    results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
-    k = k + 1
+# Run GxE model GEMMA
+runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
+     old_dir = getwd()
+     setwd(here::here(""))
+     cache_folder = here::here(paste0('eQTLmapping/cache/gemma/'),
+                           tissue, '/',
+                           current_gene)
+     #create cache folder
+     if(!dir.exists(cache_folder)){
+        dir.create(cache_folder, recursive = TRUE)
+     }
+     y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
+                  skip = which(genes == current_gene)-1, nrows = 1))
+     data = covariates |>
+          mutate(y = y) |>
+          as.data.frame()
+     mod1 <- model.matrix(global_formulas_gemma[[tissue]], covariates) 
+     write.table(mod1, paste0(cache_folder, "/mod1.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
+     
+     V_setup = import(paste0(cache_folder, '/V_setup.rds'))
+     gxe_gwas = GridLMM_GWAS(formula = ,
+                             test_formula =  ~1 + treatment,
+                             reduced_formula = ~1,
+                             data = data,
+                             X = X,
+                             X_ID = 'id',
+                             relmat = list(id = list(K = GRM)),
+                             V_setup = V_setup,
+                             method = 'REML',
+                             mc.cores = 1,
+                             verbose = F)
+     setwd(old_dir)
+     results = gxe_gwas$results
+     out_file = results |>
+          mutate(Trait = current_gene) |>
+          rename(snp = X_ID,
+                 p_main = p_value_REML.1,
+                 p_gxe = p_value_REML.2) |>
+          select(Trait, snp,  p_main, p_gxe) |> 
+          as_tibble()
+     qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
+     out_file = out_file |> 
+          mutate(q_gxe = qvalues$qvalues) 
+     return(out_file)
 }
-export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
+
+# results = vector("list", length = length(gxe_genes))
+# k = 1
+
+# for(i in k:length(gxe_genes)){
+#     print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
+#     results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
+#     k = k + 1
+# }
+# export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
 results = import(here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds"))) 
 
 x = results[[1]]
@@ -161,10 +217,74 @@ plotManhattan <- function(res, gene, signCut, tissue){
     save_plot(paste0(plot_folder, "/", gene, ".png"), manhplot, base_width = 7)
     return(manhplot)
 }
-plotManhattan(res, gene, signCut, tissue)
-map2(results, genes, plotManhattan, signCut, tissue, .progress = "Manhattan Plots")
+# plotManhattan(res, gene, signCut, tissue)
+# map2(results, gxe_genes, plotManhattan, signCut, tissue, .progress = "Manhattan Plots")
 
+x = as_tibble(tx) |>
+     filter(seqnames %in% paste0("chr", chrs))
+x$gene_id = unlist(x$gene_id)
+x = x[!duplicated(x$gene_id),]
 
+# Bind all results, filter for significant qvalues at 1%
+qtl_pos = bind_rows(results) |>
+    filter(q_gxe < 0.01) |>
+     arrange(q_gxe) |>
+     separate(snp, c("chr", "bp"), sep = "_") |>
+     select(Trait:p_main) |>
+     left_join(x, by = c("Trait" = "gene_id")) |>
+     select(Trait, seqnames, start, chr, bp, p_main) |>
+     mutate(seqnames = gsub("chr", "", seqnames)) |>
+     mutate(chr = factor(chr, levels = chrs),
+            seqnames = factor(seqnames, levels = chrs),
+            bp = as.numeric(bp), 
+            log10p = -log10(p_main)) |>
+     filter(!is.na(seqnames))
 
+ data_cum_snp <- qtl_pos %>% 
+    group_by(chr) %>% 
+    summarise(max_bp = max(bp)) %>% 
+    mutate(bp_add = lag(cumsum(max_bp), default = 0)) %>% 
+    select(chr, bp_add)
 
+qtl_pos <- qtl_pos %>% 
+    inner_join(data_cum_snp, by = "chr") %>% 
+    mutate(bp_cum = bp + bp_add)
 
+# count row per chr
+qtl_pos |>
+     group_by(seqnames) |>
+     dplyr::count()
+# count row per chr
+qtl_pos |>
+     group_by(chr) |>
+     dplyr::count()
+
+ data_cum <- qtl_pos %>% 
+    group_by(seqnames) %>% 
+    summarise(max_start = max(start)) %>% 
+    mutate(start_add = lag(cumsum(max_start), default = 0)) %>% 
+    select(seqnames, start_add)
+
+qtl_pos <- qtl_pos %>% 
+    inner_join(data_cum, by = "seqnames") %>% 
+    mutate(start_cum = start + start_add) |>
+    dplyr::select(-bp_add, -start_add)
+
+png("test.png", width = 10, height = 10, units = "in", res = 300)
+ggplot(qtl_pos, aes(bp_cum, start_cum, color = chr)) +
+    geom_point(size = 0.1, aes(alpha = log10p)) +
+    geom_vline(xintercept= hs_start, linetype = "dashed") +
+     geom_vline(xintercept= hs_end, linetype = "dashed") +
+     annotate("text", x = hs_start + 10e5, y = 1000 , label = "pHCl-1", vjust = 1, hjust = 0) +
+    theme_classic() +
+    geom_abline(intercept = 0, slope = 1) 
+dev.off()
+
+hotspot = x |> filter(gene_id == "FBgn0264908")
+hs_start = hotspot$start +  data_cum_snp[data_cum_snp$chr == "3L",]$bp_add
+hs_end = hotspot$end +  data_cum_snp[data_cum_snp$chr == "3L",]$bp_add
+
+filter(qtl_pos, bp_cum > hs_start, bp_cum < hs_end) |>
+     arrange(log10p) |>
+     group_by(Trait) |>
+     dplyr::count()

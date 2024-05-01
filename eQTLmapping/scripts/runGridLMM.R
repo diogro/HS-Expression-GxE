@@ -16,7 +16,11 @@ X = as(Xp$genotypes,'numeric')
 rownames(X) = Xp$fam$member
 colnames(X) = Xp$map$snp.name
 
-covariates = import(paste0("covariates/", tissue, ".tsv"))
+covariates = import(paste0("covariates/", tissue, ".tsv")) |>
+     mutate(egglayBatch = as.character(egglayBatch), 
+            RNAseqBatch = as.character(RNAseqBatch),
+            platingBatch = as.character(platingBatch),
+            RNAlibBatch = as.character(RNAlibBatch))
 GRM = import(paste0("GRMs/", tissue, ".cXX.txt"), header = FALSE)
 colnames(GRM) = rownames(GRM) = covariates$id
 genes = import(paste0("phenotypes/", tissue, ".genes.txt"), header = FALSE)[,1]
@@ -35,7 +39,7 @@ runGmodel = function(current_gene, tissue, covariates, GRM){
                            tissue, '/',
                            current_gene)
      y = t(import(paste0("phenotypes/", tissue, ".tsv"), 
-                  skip = which(genes == current_gene)-1, nrows = 1))
+                  skip = which(genes == current_gene), nrows = 1))
      data = covariates |>
           mutate(y = y) |>
           as.data.frame()
