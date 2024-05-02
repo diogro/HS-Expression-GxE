@@ -46,7 +46,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      rownames(data) = data$id
      V_setup = import(paste0(cache_folder, '/V_setup.rds'))
      gxe_gwas = GridLMM_GWAS(formula = global_formulas[[tissue]],
-                             test_formula =  ~ 1 + treatment, s
+                             test_formula =  ~ 1 + treatment, 
                              reduced_formula = ~1,
                              data = data,
                              X = X,
@@ -60,9 +60,11 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      out_file = results |>
           mutate(Trait = current_gene) |>
           rename(snp = X_ID,
+                 effect_main = beta.19,
+                 effect_gxe = beta.20,
                  p_main = p_value_REML.1,
                  p_gxe = p_value_REML.2) |>
-          select(Trait, snp,  p_main, p_gxe) |> 
+          select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
           as_tibble()
      qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
      out_file = out_file |> 

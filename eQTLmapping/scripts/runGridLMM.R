@@ -62,7 +62,7 @@ runGmodel = function(current_gene, tissue, covariates, GRM){
                 mutate(Trait = current_gene) |>
                 rename(snp = X_ID,
                         p_main = p_value_REML,
-                        effect = beta.9) |>
+                        effect = beta.19) |>
                 select(Trait, snp, effect, p_main) |> 
                 as_tibble()
         } else if (tissue == "body"){
