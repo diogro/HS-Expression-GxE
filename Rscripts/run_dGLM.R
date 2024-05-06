@@ -34,8 +34,8 @@ rundGLM = function(current_gene){
     df = data.frame(rbind(s$coefficients[2,] , 
                     s$dispersion.summary$coefficient[2,]), 
             name = c("mean", "dispersion"), 
-            trait = colnames(phenos)[current_gene])
-    names(df) = c("estimate", "std.error", "z.value", "p.value", "name", "trait")
+            Geneid = colnames(phenos)[current_gene])
+    names(df) = c("estimate", "std.error", "z.value", "p.value", "name", "Geneid")
     df
 }
 safe_runDGLM = possibly(.f = rundGLM, otherwise = NULL)
@@ -68,15 +68,60 @@ rundGLM = function(current_gene){
     df = data.frame(rbind(s$coefficients[2,] , 
                     s$dispersion.summary$coefficient[2,]), 
             name = c("mean", "dispersion"), 
-            trait = colnames(phenos)[current_gene])
-    names(df) = c("estimate", "std.error", "z.value", "p.value", "name", "trait")
+            Geneid = colnames(phenos)[current_gene])
+    names(df) = c("estimate", "std.error", "z.value", "p.value", "name", "Geneid")
     df
 }
 safe_runDGLM = possibly(.f = rundGLM, otherwise = NULL)
 dGLM_body = map_df(1:ncol(phenos), safe_runDGLM, .progress = 'dGLM')
-length(unique(dGLM_body$trait)) 
+length(unique(dGLM_body$Geneid)) 
 
-bind_rows(list(head = dGLM_head, body = dGLM_body), .id = 'tissue', )  |> 
+dGLM = bind_rows(list(head = dGLM_head, body = dGLM_body), .id = 'tissue', )  |> 
     as_tibble() |>
-    select (tissue, trait, name, everything()) |> 
-    export(affix_date(here::here("output/dGLM.csv")))
+    rename(Geneid = trait) |>
+    select (tissue, Geneid, name, everything()) 
+export(dGLM, affix_date(here::here("output/dGLM.csv")))
+
+results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-03-21.csv")),
+               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2024-03-21.csv")),
+               DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2024-03-21.csv"))) 
+
+limma_dglm = results$limma |> 
+    select(tissue, Geneid, SYMBOL, logFC, P.Value) |>
+    as_tibble() |>
+    inner_join(dGLM |> filter(name == "mean"), by = c("tissue", "Geneid")) 
+
+p = ggplot(limma_dglm, aes(x = estimate, y = logFC)) + 
+    geom_point() + 
+    geom_abline(slope = 1, intercept = 0, color = "red") + 
+    facet_wrap(~tissue) + 
+    theme_minimal() + 
+    labs(x = "dGLM estimate", y = "limma logFC")
+save_plot(affix_date(here::here("output/plots/limma_dglm.png")), p)
+
+
+vicar_dglm = results$vicar |> 
+    select(tissue, Geneid, SYMBOL, betahat, lfdr) |>
+    as_tibble() |>
+    inner_join(dGLM |> filter(name == "mean"), by = c("tissue", "Geneid")) 
+
+p = ggplot(vicar_dglm, aes(x = estimate, y = betahat)) + 
+    geom_point() + 
+    geom_abline(slope = 1, intercept = 0, color = "red") + 
+    facet_wrap(~tissue) + 
+    theme_minimal() + 
+    labs(x = "dGLM estimate", y = "vicar logFC")
+save_plot(affix_date(here::here("output/plots/vicar_dglm.png")), p)
+
+DESeq_dglm = results$DESeq |> 
+    select(tissue, Geneid, SYMBOL, log2FoldChange, padj) |>
+    as_tibble() |>
+    inner_join(dGLM |> filter(name == "mean"), by = c("tissue", "Geneid"))
+
+p = ggplot(DESeq_dglm, aes(x = estimate, y = log2FoldChange)) +
+    geom_point() + 
+    geom_abline(slope = 1, intercept = 0, color = "red") + 
+    facet_wrap(~tissue) + 
+    theme_minimal() + 
+    labs(x = "dGLM estimate", y = "DESeq logFC")
+save_plot(affix_date(here::here("output/plots/DESeq_dglm.png")), p)
