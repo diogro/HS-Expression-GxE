@@ -8,8 +8,8 @@ library(qvalue)
 tissue = snakemake@wildcards[["tissue"]]
 current_gene = snakemake@wildcards[["gene"]]
 
-# setwd("eQTLmapping")
-# tissue = "head"
+# setwd(here::here("eQTLmapping"))
+# tissue = "body"
 
 Xp = read.plink(paste0("bed_files/", tissue))
 X = as(Xp$genotypes,'numeric') 
@@ -57,15 +57,27 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
                              mc.cores = 1,
                              verbose = T)
      results = gxe_gwas$results
-     out_file = results |>
-          mutate(Trait = current_gene) |>
-          rename(snp = X_ID,
-                 effect_main = beta.19,
-                 effect_gxe = beta.20,
-                 p_main = p_value_REML.1,
-                 p_gxe = p_value_REML.2) |>
-          select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
-          as_tibble()
+     if(tissue == "head"){
+          out_file = results |>
+               mutate(Trait = current_gene) |>
+               rename(snp = X_ID,
+                         effect_main = beta.19,
+                         effect_gxe = beta.20,
+                         p_main = p_value_REML.1,
+                         p_gxe = p_value_REML.2) |>
+               select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
+               as_tibble()
+     } else {
+          out_file = results |>
+               mutate(Trait = current_gene) |>
+               rename(snp = X_ID,
+                         effect_main = beta.11,
+                         effect_gxe = beta.12,
+                         p_main = p_value_REML.1,
+                         p_gxe = p_value_REML.2) |>
+               select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
+               as_tibble()
+     }
      qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
      out_file = out_file |> 
           mutate(q_gxe = qvalues$qvalues) 

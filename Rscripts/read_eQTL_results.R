@@ -22,13 +22,17 @@ X = as(Xp$genotypes,'numeric')
 rownames(X) = Xp$fam$member
 colnames(X) = Xp$map$snp.name
 
-covariates = import(here::here(paste0("eQTLmapping/covariates/", tissue, ".tsv")))
+covariates = import(here::here(paste0("eQTLmapping/covariates/", tissue, ".tsv"))) |>
+     mutate(egglayBatch = as.character(egglayBatch), 
+            RNAseqBatch = as.character(RNAseqBatch),
+            platingBatch = as.character(platingBatch),
+            RNAlibBatch = as.character(RNAlibBatch))            
 GRM = import(here::here(paste0("eQTLmapping/GRMs/", tissue, ".cXX.txt")), header = FALSE)
 colnames(GRM) = rownames(GRM) = covariates$id
 genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt")), header = FALSE)[,1]
 gxe_genes = gxe_genes[[tissue]]
 
-current_gene = genes[100]
+current_gene = gxe_genes[5]
 
 global_formulas <- list(
           head = 
@@ -85,7 +89,6 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
 # Run GxE model GEMMA
 runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
      old_dir = getwd()
-     setwd(here::here(""))
      cache_folder = here::here(paste0('eQTLmapping/cache/gemma/'),
                            tissue, '/',
                            current_gene)
@@ -94,25 +97,22 @@ runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
         dir.create(cache_folder, recursive = TRUE)
      }
      y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
-                  skip = which(genes == current_gene)-1, nrows = 1))
+                  skip = which(genes == current_gene), nrows = 1))
      data = covariates |>
           mutate(y = y) |>
           as.data.frame()
      mod1 <- model.matrix(global_formulas_gemma[[tissue]], covariates) 
      write.table(mod1, paste0(cache_folder, "/mod1.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
-     
-     V_setup = import(paste0(cache_folder, '/V_setup.rds'))
-     gxe_gwas = GridLMM_GWAS(formula = ,
-                             test_formula =  ~1 + treatment,
-                             reduced_formula = ~1,
-                             data = data,
-                             X = X,
-                             X_ID = 'id',
-                             relmat = list(id = list(K = GRM)),
-                             V_setup = V_setup,
-                             method = 'REML',
-                             mc.cores = 1,
-                             verbose = F)
+     write.table(data$y, paste0(cache_folder, "/pheno.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
+     write.table(data$treatment, paste0(cache_folder, "/env.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
+     setwd(cache_folder)
+     system("gemma -bfile ../../../../bed_files/head -p pheno.txt -c mod1.txt -gxe env.txt -d /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenD.txt -u /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenU.txt -lmm 4 -o gemma")
+     results = import("gemma.gxe.out") |>
+          rename(snp = "rs",
+                 p_gxe = "p_lrt") |>
+          select(snp, p_gxe) |>
+          mutate(Trait = current_gene) |>
+          as_tibble()
      setwd(old_dir)
      results = gxe_gwas$results
      out_file = results |>
@@ -128,15 +128,15 @@ runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
      return(out_file)
 }
 
-# results = vector("list", length = length(gxe_genes))
-# k = 1
+results = vector("list", length = length(gxe_genes))
+k = 1
 
-# for(i in k:length(gxe_genes)){
-#     print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
-#     results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
-#     k = k + 1
-# }
-# export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
+for(i in k:length(gxe_genes)){
+    print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
+    results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
+    k = k + 1
+}
+export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
 results = import(here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds"))) 
 
 x = results[[1]]
