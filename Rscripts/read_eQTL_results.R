@@ -33,6 +33,7 @@ genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt"
 gxe_genes = gxe_genes[[tissue]]
 
 current_gene = gxe_genes[5]
+current_gene = "FBgn0004396"
 
 global_formulas <- list(
           head = 
@@ -54,7 +55,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
                            tissue, '/',
                            current_gene)
      y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
-                  skip = which(genes == current_gene)-1, nrows = 1))
+                  skip = which(genes == current_gene), nrows = 1))
      data = covariates |>
           mutate(y = y) |>
           as.data.frame()
@@ -86,6 +87,20 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      return(out_file)
 }
 
+gemma = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
+
+head(gemma)
+head(results)
+gemma_gridlmm = inner_join(results, gemma, by = c("X_ID" = "rs")) |>
+     select(X_ID, p_score, p_value_REML.2) |>
+     arrange(p_value_REML.2) |> as_tibble()
+p = ggplot(gemma_gridlmm, aes(x = p_score, y = p_value_REML.2)) +
+     geom_point() +
+     geom_abline(intercept = 0, slope = 1) +
+     scale_x_log10() +
+     scale_y_log10()
+save_plot(here::here("tmp/gemma_gridlmm.png"), p, base_width = 7)
+
 # Run GxE model GEMMA
 runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
      old_dir = getwd()
@@ -107,7 +122,7 @@ runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
      write.table(data$treatment, paste0(cache_folder, "/env.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
      setwd(cache_folder)
      system("gemma -bfile ../../../../bed_files/head -p pheno.txt -c mod1.txt -gxe env.txt -d /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenD.txt -u /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenU.txt -lmm 4 -o gemma")
-     results = import("gemma.gxe.out") |>
+     gemma_results = import("output/gemma.assoc.txt") |>
           rename(snp = "rs",
                  p_gxe = "p_lrt") |>
           select(snp, p_gxe) |>
