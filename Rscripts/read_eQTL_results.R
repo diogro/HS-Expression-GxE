@@ -32,8 +32,8 @@ colnames(GRM) = rownames(GRM) = covariates$id
 genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt")), header = FALSE)[,1]
 gxe_genes = gxe_genes[[tissue]]
 
-current_gene = gxe_genes[5]
-current_gene = "FBgn0004396"
+# current_gene = gxe_genes[5]
+# current_gene = "FBgn0000579"
 
 global_formulas <- list(
           head = 
@@ -81,63 +81,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
                  p_gxe = p_value_REML.2) |>
           select(Trait, snp,  p_main, p_gxe) |> 
           as_tibble()
-     qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
-     out_file = out_file |> 
-          mutate(q_gxe = qvalues$qvalues) 
-     return(out_file)
-}
-
-gemma = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
-
-head(gemma)
-head(results)
-gemma_gridlmm = inner_join(results, gemma, by = c("X_ID" = "rs")) |>
-     select(X_ID, p_score, p_value_REML.2) |>
-     arrange(p_value_REML.2) |> as_tibble()
-p = ggplot(gemma_gridlmm, aes(x = p_score, y = p_value_REML.2)) +
-     geom_point() +
-     geom_abline(intercept = 0, slope = 1) +
-     scale_x_log10() +
-     scale_y_log10()
-save_plot(here::here("tmp/gemma_gridlmm.png"), p, base_width = 7)
-
-# Run GxE model GEMMA
-runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
-     old_dir = getwd()
-     cache_folder = here::here(paste0('eQTLmapping/cache/gemma/'),
-                           tissue, '/',
-                           current_gene)
-     #create cache folder
-     if(!dir.exists(cache_folder)){
-        dir.create(cache_folder, recursive = TRUE)
-     }
-     y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
-                  skip = which(genes == current_gene), nrows = 1))
-     data = covariates |>
-          mutate(y = y) |>
-          as.data.frame()
-     mod1 <- model.matrix(global_formulas_gemma[[tissue]], covariates) 
-     write.table(mod1, paste0(cache_folder, "/mod1.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
-     write.table(data$y, paste0(cache_folder, "/pheno.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
-     write.table(data$treatment, paste0(cache_folder, "/env.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
-     setwd(cache_folder)
-     system("gemma -bfile ../../../../bed_files/head -p pheno.txt -c mod1.txt -gxe env.txt -d /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenD.txt -u /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenU.txt -lmm 4 -o gemma")
-     gemma_results = import("output/gemma.assoc.txt") |>
-          rename(snp = "rs",
-                 p_gxe = "p_lrt") |>
-          select(snp, p_gxe) |>
-          mutate(Trait = current_gene) |>
-          as_tibble()
-     setwd(old_dir)
-     results = gxe_gwas$results
-     out_file = results |>
-          mutate(Trait = current_gene) |>
-          rename(snp = X_ID,
-                 p_main = p_value_REML.1,
-                 p_gxe = p_value_REML.2) |>
-          select(Trait, snp,  p_main, p_gxe) |> 
-          as_tibble()
-     qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
+     qvalues = qvalue(out_file$p_gxe, fdr.level = 0.1)
      out_file = out_file |> 
           mutate(q_gxe = qvalues$qvalues) 
      return(out_file)
@@ -158,24 +102,29 @@ x = results[[1]]
 any(x$q_gxe < 0.1)
 
 
-signCut <- 1e-4
+signCut <- 0.1
 
 # Make a manhattan plot
 res = results[[1]]
+res |> arrange(q_gxe)
 gene = gxe_genes[1]
 plotManhattan <- function(res, gene, signCut, tissue){
+    qvalues = qvalue(res$p_gxe, fdr.level = 0.1)
+    res = res |> 
+          mutate(q_gxe = qvalues$qvalues) |>
+          arrange(q_gxe)
     res = res |>
         mutate(log_p_gxe = -log10(p_gxe)) |>
         separate(snp, c("chr", "bp"), sep = "_") |>
         mutate(chr = factor(chr, levels = chrs),
                 bp = as.numeric(bp)) |>
-        arrange(p_gxe) 
+        arrange(q_gxe) 
 
     gwas_data_load = res
     sig_data <- gwas_data_load %>% 
-    subset(p_gxe < signCut)
+    subset(q_gxe < signCut)
     notsig_data <- gwas_data_load %>% 
-    subset(p_gxe >= signCut) %>%
+    subset(q_gxe >= signCut) %>%
     group_by(chr) %>% 
     sample_frac(0.5)
     gwas_data <- bind_rows(sig_data, notsig_data)
@@ -200,11 +149,11 @@ plotManhattan <- function(res, gene, signCut, tissue){
     mutate(ylim = abs(floor(log10(p_gxe))) + 2) %>% 
     pull(ylim)
 
-    manhplot <- ggplot(filter(gwas_data, p_gxe < signCut, chr != 4), aes(x = bp_cum, y = -log10(p_gxe), 
+    manhplot <- ggplot(filter(gwas_data, q_gxe < signCut, chr != 4), aes(x = bp_cum, y = -log10(p_gxe), 
                                     color = chr)) +
     geom_hline(yintercept = -log10(signCut), color = "grey40", linetype = "dashed") + 
     geom_point(alpha = 0.7, size = 0.005) +
-    geom_point(data = filter(gwas_data, p_gxe > signCut), alpha = 0.75, size = 0.005, color = "grey") +
+    geom_point(data = filter(gwas_data, q_gxe > signCut), alpha = 0.75, size = 0.005, color = "grey") +
     scale_x_continuous(label = axis_set$chr, breaks = axis_set$center) +
     scale_y_continuous(expand = c(0,0), limits = c(0, ylim), breaks = seq(0, 10, 1)) +
     scale_color_manual(values = rep(c("#276FBF", "#183059"), unique(length(axis_set$chr)))) +
@@ -232,7 +181,7 @@ plotManhattan <- function(res, gene, signCut, tissue){
     save_plot(paste0(plot_folder, "/", gene, ".png"), manhplot, base_width = 7)
     return(manhplot)
 }
-# plotManhattan(res, gene, signCut, tissue)
+ plotManhattan(res, gene, signCut, tissue)
 # map2(results, gxe_genes, plotManhattan, signCut, tissue, .progress = "Manhattan Plots")
 
 x = as_tibble(tx) |>
@@ -303,3 +252,59 @@ filter(qtl_pos, bp_cum > hs_start, bp_cum < hs_end) |>
      arrange(log10p) |>
      group_by(Trait) |>
      dplyr::count()
+
+gemma = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
+
+# head(gemma_results)
+# head(results)
+# gemma_gridlmm = inner_join(results, gemma_results, by = c("X_ID" = "rs")) |>
+#      select(X_ID, p_score, p_value_REML.2) |>
+#      arrange(p_value_REML.2) |> as_tibble()
+# p = ggplot(gemma_gridlmm, aes(x = p_score, y = p_value_REML.2)) +
+#      geom_point() +
+#      geom_abline(intercept = 0, slope = 1) +
+#      scale_x_log10() +
+#      scale_y_log10()
+# save_plot(here::here("tmp/gemma_gridlmm.png"), p, base_width = 7)
+
+# # Run GxE model GEMMA
+# runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
+#      old_dir = getwd()
+#      cache_folder = here::here(paste0('eQTLmapping/cache/gemma/'),
+#                            tissue, '/',
+#                            current_gene)
+#      #create cache folder
+#      if(!dir.exists(cache_folder)){
+#         dir.create(cache_folder, recursive = TRUE)
+#      }
+#      y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
+#                   skip = which(genes == current_gene), nrows = 1))
+#      data = covariates |>
+#           mutate(y = y) |>
+#           as.data.frame()
+#      mod1 <- model.matrix(global_formulas_gemma[[tissue]], covariates) 
+#      write.table(mod1, paste0(cache_folder, "/mod1.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
+#      write.table(data$y, paste0(cache_folder, "/pheno.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
+#      write.table(data$treatment, paste0(cache_folder, "/env.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE)
+#      setwd(cache_folder)
+#      system("gemma -bfile ../../../../bed_files/head -p pheno.txt -c mod1.txt -gxe env.txt -d /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenD.txt -u /Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs/head.eigenU.txt -lmm 4 -o gemma")
+#      gemma_results = import("output/gemma.assoc.txt") |>
+#           rename(snp = "rs",
+#                  p_gxe = "p_lrt") |>
+#           select(snp, p_gxe) |>
+#           mutate(Trait = current_gene) |>
+#           as_tibble()
+#      setwd(old_dir)
+#      results = gxe_gwas$results
+#      out_file = results |>
+#           mutate(Trait = current_gene) |>
+#           rename(snp = X_ID,
+#                  p_main = p_value_REML.1,
+#                  p_gxe = p_value_REML.2) |>
+#           select(Trait, snp,  p_main, p_gxe) |> 
+#           as_tibble()
+#      qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
+#      out_file = out_file |> 
+#           mutate(q_gxe = qvalues$qvalues) 
+#      return(out_file)
+# }
