@@ -1,5 +1,5 @@
 source(here::here("Rscripts/functions.R"))
-pak::pkg_install("PhenotypeSimulator")
+#pak::pkg_install("PhenotypeSimulator")
 library(PhenotypeSimulator)
 
 rnaseq = import(here::here("cache/rnaseq_all_2024-03-21.rds"))
@@ -87,15 +87,15 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      return(out_file)
 }
 
-results = vector("list", length = length(gxe_genes))
-k = 1
+# results = vector("list", length = length(gxe_genes))
+# k = 1
 
-for(i in k:length(gxe_genes)){
-    print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
-    results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
-    k = k + 1
-}
-export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
+# for(i in k:length(gxe_genes)){
+#     print(paste0("Current gene: ", gxe_genes[i], " Percent: ", 100*round(i/length(gxe_genes), 3), "%"))
+#     results[[k]] = runGxEmodel(gxe_genes[i], tissue, covariates, GRM)
+#     k = k + 1
+# }
+# export(results, here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds")))
 results = import(here::here(paste0("cache/eQTL_detections_gxe-", tissue, ".rds"))) 
 
 x = results[[1]]
@@ -181,7 +181,7 @@ plotManhattan <- function(res, gene, signCut, tissue){
     save_plot(paste0(plot_folder, "/", gene, ".png"), manhplot, base_width = 7)
     return(manhplot)
 }
- plotManhattan(res, gene, signCut, tissue)
+plotManhattan(res, gene, signCut, tissue)
 # map2(results, gxe_genes, plotManhattan, signCut, tissue, .progress = "Manhattan Plots")
 
 x = as_tibble(tx) |>
@@ -191,7 +191,7 @@ x = x[!duplicated(x$gene_id),]
 
 # Bind all results, filter for significant qvalues at 1%
 qtl_pos = bind_rows(results) |>
-    filter(q_gxe < 0.01) |>
+    filter(q_gxe < 0.005) |>
      arrange(q_gxe) |>
      separate(snp, c("chr", "bp"), sep = "_") |>
      select(Trait:p_main) |>
@@ -234,26 +234,50 @@ qtl_pos <- qtl_pos %>%
     mutate(start_cum = start + start_add) |>
     dplyr::select(-bp_add, -start_add)
 
+gr <- GRanges(
+    seqnames = paste0("chr", qtl_pos$chr),
+    ranges = IRanges(qtl_pos$bp, end = qtl_pos$bp, 
+                     names = paste(qtl_pos$chr, qtl_pos$bp, sep = "_"), 
+                     trait = qtl_pos$Trait)
+                     )
+genes_gr = subsetByOverlaps(tx, gr)
+matched_genes = table(unlist(genes_gr$gene_id)) |> sort()
+matched_genes[matched_genes > 15]
+
+chr3L = genes_gr[seqnames(genes_gr) == "chr3L"]
+matched_genes = table(unlist(chr3L$gene_id)) |> sort()
+
+
+hotspot = x |> 
+     filter(gene_id %in% names(matched_genes)[matched_genes > 15]) |> 
+     mutate(seqnames = gsub("chr", "", seqnames)) 
+hotspot$cum_start = hotspot$start +  data_cum_snp[match(hotspot$seqnames, data_cum_snp$chr),]$bp_add
+hotspot$cum_end = hotspot$end +  data_cum_snp[match(hotspot$seqnames, data_cum_snp$chr),]$bp_add
+hotspot = unique(hotspot)
+
 png("test.png", width = 10, height = 10, units = "in", res = 300)
 ggplot(qtl_pos, aes(bp_cum, start_cum, color = chr)) +
     geom_point(size = 0.1, aes(alpha = log10p)) +
-    geom_vline(xintercept= hs_start, linetype = "dashed") +
-     geom_vline(xintercept= hs_end, linetype = "dashed") +
-     annotate("text", x = hs_start + 10e5, y = 1000 , label = "pHCl-1", vjust = 1, hjust = 0) +
+    geom_vline(data = hotspot, aes(xintercept= cum_start), linetype = "dashed", linewidth = 0.2) +
+     geom_vline(data = hotspot, aes(xintercept= cum_end), linetype = "dashed", linewidth = 0.2) +
+     #annotate("text", x = hs_start + 10e5, y = 1000 , label = "pHCl-1", vjust = 1, hjust = 0) +
     theme_classic() +
+    labs(x = "eQTL position", y = "Gene position") +
     geom_abline(intercept = 0, slope = 1) 
 dev.off()
 
-hotspot = x |> filter(gene_id == "FBgn0264908")
-hs_start = hotspot$start +  data_cum_snp[data_cum_snp$chr == "3L",]$bp_add
-hs_end = hotspot$end +  data_cum_snp[data_cum_snp$chr == "3L",]$bp_add
 
 filter(qtl_pos, bp_cum > hs_start, bp_cum < hs_end) |>
      arrange(log10p) |>
      group_by(Trait) |>
      dplyr::count()
 
-gemma = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
+# Create a GRanges object
+
+## Convert chr to numeric
+
+
+# gemma = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
 
 # head(gemma_results)
 # head(results)
