@@ -5,6 +5,8 @@ library(rio)
 library(poolr)
 library(qvalue)
 
+source(here::here("eQTLmapping/scripts/snpPosClassify.R"))
+
 tissue = snakemake@wildcards[["tissue"]]
 current_gene = snakemake@wildcards[["gene"]]
 
@@ -37,9 +39,10 @@ global_formulas <- list(
 runGxEmodel = function(current_gene, tissue, covariates, GRM){
      cache_folder = paste0('cache/',
                            tissue, '/',
-                           current_gene);
+                           current_gene)
      y = t(import(paste0("phenotypes/", tissue, ".tsv"), 
-                  skip = which(genes == current_gene), nrows = 1))
+                  skip = which(genes == current_gene),
+                  nrows = 1))
      data = covariates |>
           mutate(y = y) |>
           as.data.frame()
@@ -47,7 +50,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      V_setup = import(paste0(cache_folder, '/V_setup.rds'))
      gxe_gwas = GridLMM_GWAS(formula = global_formulas[[tissue]],
                              test_formula =  ~ 1 + treatment, 
-                             reduced_formula = ~1,
+                             reduced_formula = ~ 1,
                              data = data,
                              X = X,
                              X_ID = 'id',
@@ -59,38 +62,33 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
      results = gxe_gwas$results
      if(tissue == "head"){
           out_file = results |>
-               mutate(Trait = current_gene) |>
-               rename(snp = X_ID,
+               dplyr::mutate(Trait = current_gene) |>
+               dplyr::rename(snp = X_ID,
                          effect_main = beta.19,
                          effect_gxe = beta.20,
                          p_main = p_value_REML.1,
                          p_gxe = p_value_REML.2) |>
-               select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
+               dplyr::select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
                as_tibble()
      } else {
           out_file = results |>
-               mutate(Trait = current_gene) |>
-               rename(snp = X_ID,
+               dplyr::mutate(Trait = current_gene) |>
+               dplyr::rename(snp = X_ID,
                          effect_main = beta.11,
                          effect_gxe = beta.12,
                          p_main = p_value_REML.1,
                          p_gxe = p_value_REML.2) |>
-               select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
+               dplyr::select(Trait, snp,  effect_main, effect_gxe, p_main, p_gxe) |> 
                as_tibble()
      }
      qvalues = qvalue(out_file$p_gxe, fdr.level = 0.01)
      out_file = out_file |> 
-          mutate(q_gxe = qvalues$qvalues) 
-     fdr_filtered = out_file |>  
-          filter(qvalues$significant) 
-     out_file = filter(out_file, q_gxe < 0.1) |>
-          as_tibble()
-     export(out_file,  snakemake@output[[1]])
-     if(nrow(fdr_filtered) > 0){
-          detection_file = paste0("detections/gxe/", tissue, "/", current_gene, ".tsv")
-          export(fdr_filtered, detection_file)
-     } 
-     return()
+          dplyr::mutate(q_gxe = qvalues$qvalues, 
+                 cis = as.numeric(snp %in% getCisSnps(current_gene))) 
+     pvalue_filtered = out_file |>  
+          dplyr::filter(p_gxe < 0.01) 
+     export(pvalue_filtered,  snakemake@output[[1]])
+     return(0)
 }
 runGxEmodel(current_gene, tissue, covariates, GRM)
 cat("Done!")

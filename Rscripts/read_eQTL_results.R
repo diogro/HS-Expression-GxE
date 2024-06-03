@@ -9,12 +9,10 @@ library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
 txdb = TxDb.Dmelanogaster.UCSC.dm6.ensGene
 tx <- transcripts(txdb, columns = "gene_id")
 
-chrs <- c("2L", "2R", "3L", "3R", "4", "X")
 
 detection_files = list(head = dir(here::here("eQTLmapping/detections/gxe/head")),
                           body = dir(here::here("eQTLmapping/detections/gxe/body")))              
 gxe_genes = lapply(detection_files, function(x) gsub(".tsv", "", x)) 
-
 tissue = 'head'
 
 Xp = read.plink(here::here(paste0("eQTLmapping/bed_files/", tissue)))
@@ -189,6 +187,9 @@ x = as_tibble(tx) |>
 x$gene_id = unlist(x$gene_id)
 x = x[!duplicated(x$gene_id),]
 
+tx.git  = GNCList(tx)
+
+
 # Bind all results, filter for significant qvalues at 1%
 qtl_pos = bind_rows(results) |>
     filter(q_gxe < 0.005) |>
@@ -234,22 +235,41 @@ qtl_pos <- qtl_pos %>%
     mutate(start_cum = start + start_add) |>
     dplyr::select(-bp_add, -start_add)
 
-gr <- GRanges(
+eqtl_GR <- GRanges(
     seqnames = paste0("chr", qtl_pos$chr),
     ranges = IRanges(qtl_pos$bp, end = qtl_pos$bp, 
                      names = paste(qtl_pos$chr, qtl_pos$bp, sep = "_"), 
                      trait = qtl_pos$Trait)
                      )
-genes_gr = subsetByOverlaps(tx, gr)
-matched_genes = table(unlist(genes_gr$gene_id)) |> sort()
-matched_genes[matched_genes > 15]
+overlap_git = findOverlaps(eqtl_GR, tx.git)
+qtl_gene_overlap = eqtl_GR[overlap_git@from,]
+qtl_gene_overlap$gene_id = tx.git[overlap_git@to]$gene_id
+qtl_gene_overlap = unique(qtl_gene_overlap)
 
-chr3L = genes_gr[seqnames(genes_gr) == "chr3L"]
-matched_genes = table(unlist(chr3L$gene_id)) |> sort()
+qtl_g_over_df = as_tibble(qtl_gene_overlap) |>
+     mutate(seqnames = gsub("chr", "", seqnames), 
+            gene_id = unlist(gene_id))
 
+hotspot_count = as_tibble(qtl_gene_overlap) |>
+     mutate(seqnames = gsub("chr", "", seqnames), 
+            gene_id = unlist(gene_id)) |>
+     group_by(seqnames, trait, gene_id) |>  
+     dplyr::count() |>
+     arrange(desc(n)) |>
+     ungroup() |>
+     group_by(gene_id) |>
+     dplyr::count() |>
+     arrange(desc(n)) |>
+     head(20)
 
-hotspot = x |> 
-     filter(gene_id %in% names(matched_genes)[matched_genes > 15]) |> 
+gene_pos = as_tibble(tx) |>
+     filter(seqnames %in% paste0("chr", chrs))
+gene_pos$gene_id = unlist(x$gene_id)
+gene_pos = gene_pos[!duplicated(gene_pos$gene_id),]
+gene_pos$gene_id = unlist(gene_pos$gene_id)
+
+hotspot = gene_pos |> 
+     filter(gene_id %in% unlist(hotspot_count$gene_id)) |> 
      mutate(seqnames = gsub("chr", "", seqnames)) 
 hotspot$cum_start = hotspot$start +  data_cum_snp[match(hotspot$seqnames, data_cum_snp$chr),]$bp_add
 hotspot$cum_end = hotspot$end +  data_cum_snp[match(hotspot$seqnames, data_cum_snp$chr),]$bp_add
@@ -276,20 +296,21 @@ filter(qtl_pos, bp_cum > hs_start, bp_cum < hs_end) |>
 
 ## Convert chr to numeric
 
+grid = results[[which(gxe_genes == "FBgn0004396")]]
+gemma_results = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
 
-# gemma = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
-
-# head(gemma_results)
-# head(results)
-# gemma_gridlmm = inner_join(results, gemma_results, by = c("X_ID" = "rs")) |>
-#      select(X_ID, p_score, p_value_REML.2) |>
-#      arrange(p_value_REML.2) |> as_tibble()
-# p = ggplot(gemma_gridlmm, aes(x = p_score, y = p_value_REML.2)) +
-#      geom_point() +
-#      geom_abline(intercept = 0, slope = 1) +
-#      scale_x_log10() +
-#      scale_y_log10()
-# save_plot(here::here("tmp/gemma_gridlmm.png"), p, base_width = 7)
+head(gemma_results)
+head(grid)
+gemma_gridlmm = inner_join(grid, gemma_results, by = c("snp" = "rs")) |>
+     select(snp, p_score, p_gxe) |>
+     arrange(p_gxe) |> as_tibble()
+with(gemma_gridlmm, cor(p_score, p_gxe))
+p = ggplot(gemma_gridlmm, aes(x = p_score, y = p_gxe)) +
+     geom_point() +
+     geom_abline(intercept = 0, slope = 1) +
+     scale_x_log10() +
+     scale_y_log10()
+save_plot(here::here("tmp/gemma_gridlmm.png"), p, base_width = 7)
 
 # # Run GxE model GEMMA
 # runGxEmodelGEMMA = function(current_gene, tissue, covariates, GRM){
@@ -332,3 +353,28 @@ filter(qtl_pos, bp_cum > hs_start, bp_cum < hs_end) |>
 #           mutate(q_gxe = qvalues$qvalues) 
 #      return(out_file)
 # }
+
+library(GenomicRanges)
+df1 = data.frame(chr = c("chr1",  "chr12"), start = c(10000,  10000), end = c(20000, 20000))
+df2 = data.frame(chr = rep("chr1", 4), posn = c(100, 12000, 15000, 250000), x = rep(1, 4), y = rep(2, 4), z = rep(3, 4))
+
+df1.ir = IRanges(start = df1$start, end = df1$end, names = df1$chr)
+df2.ir = IRanges(start = df2$posn, end = df2$posn, names = df2$chr) 
+
+df1.it = NCList(df1.ir)
+
+overlap_it = findOverlaps(df2.ir, df1.it)
+print(overlap_it)
+
+# define a genomic interval tree (git) for faster search 
+
+df1.gr = GRanges (IRanges(start = df1$start, end = df1$end), seqnames=df1$chr) 
+df2.gr = GRanges(IRanges(start=df2$posn, end = df2$posn), seqnames = df2$chr) 
+
+df1.git  = GNCList(df1.gr)
+t1 = Sys.time ()
+overlap_git = findOverlaps(df2.gr, df1.git)
+t2 = Sys.time()
+sub1 = difftime(t2, t1, tz, units = c("auto"))
+print (sub1)
+print (overlap_git)
