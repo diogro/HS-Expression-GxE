@@ -128,3 +128,72 @@ getCisSnps = function(transcript, window = 10000, snps = snp_pos){
   gene_location = gene_locations_GR[which(gene_locations_GR$gene_id == transcript)] + window
   return(snps$rs[unique(findOverlaps(snp_GR, gene_location)@from)])
 }
+
+getEnclosingGene <- function(snp, all_snps = snp_pos, window = 0){
+  c_snp_pos = all_snps |>
+    filter(rs == snp)
+  c_snp_GR = GRanges(
+    seqnames = c_snp_pos$chr,
+    ranges = IRanges(c_snp_pos$bp, end = c_snp_pos$bp, 
+                     names = c_snp_pos$rs))
+  gene_location = gene_locations_GR + window
+  overlap = findOverlaps(c_snp_GR, gene_location)@to
+  if(length(overlap) == 0){
+    return(NULL)
+  } else {
+    enclosingGene = unique(gene_location[overlap]$gene_id)
+    return(data.frame(snp = snp, index = 1:length(enclosingGene), enclosingGene = enclosingGene))
+  }
+}
+
+global_formulas <- list(
+          head = 
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2 + (1|id),
+          body = 
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 +         (1|id)
+)
+global_formulas_gemma <- list(
+          head = 
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2,
+          body = 
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat
+)
+
+runGxEmodel = function(current_gene, tissue, covariates, GRM){
+     old_dir = getwd()
+     setwd(here::here("eQTLmapping"))
+     cache_folder = here::here(paste0('eQTLmapping/cache/'),
+                           tissue, '/',
+                           current_gene)
+     y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
+                  skip = which(genes == current_gene), nrows = 1))
+     data = covariates |>
+          mutate(y = y) |>
+          as.data.frame()
+     rownames(data) = data$id
+     V_setup = import(paste0(cache_folder, '/V_setup.rds'))
+     gxe_gwas = GridLMM_GWAS(formula = global_formulas[[tissue]],
+                             test_formula =  ~1 + treatment,
+                             reduced_formula = ~1,
+                             data = data,
+                             X = X,
+                             X_ID = 'id',
+                             relmat = list(id = list(K = GRM)),
+                             V_setup = V_setup,
+                             method = 'REML',
+                             mc.cores = 1,
+                             verbose = F)
+     setwd(old_dir)
+     results = gxe_gwas$results
+     out_file = results |>
+          mutate(Trait = current_gene) |>
+          rename(snp = X_ID,
+                 p_main = p_value_REML.1,
+                 p_gxe = p_value_REML.2) |>
+          select(Trait, snp,  p_main, p_gxe) |> 
+          as_tibble()
+     qvalues = qvalue(out_file$p_gxe, fdr.level = 0.1)
+     out_file = out_file |> 
+          mutate(q_gxe = qvalues$qvalues) 
+     return(out_file)
+}

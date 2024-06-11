@@ -4,15 +4,8 @@ library(PhenotypeSimulator)
 
 rnaseq = import(here::here("cache/rnaseq_all_2024-03-21.rds"))
 
-# pak::pkg_install("TxDb.Dmelanogaster.UCSC.dm6.ensGene")
-library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
-txdb = TxDb.Dmelanogaster.UCSC.dm6.ensGene
-tx <- transcripts(txdb, columns = "gene_id")
-
-
-detection_files = list(head = dir(here::here("eQTLmapping/detections/gxe/head")),
-                          body = dir(here::here("eQTLmapping/detections/gxe/body")))              
-gxe_genes = lapply(detection_files, function(x) gsub(".tsv", "", x)) 
+source(here::here("eQTLmapping/scripts/snpPosClassify.R"))
+             
 tissue = 'head'
 
 Xp = read.plink(here::here(paste0("eQTLmapping/bed_files/", tissue)))
@@ -28,62 +21,90 @@ covariates = import(here::here(paste0("eQTLmapping/covariates/", tissue, ".tsv")
 GRM = import(here::here(paste0("eQTLmapping/GRMs/", tissue, ".cXX.txt")), header = FALSE)
 colnames(GRM) = rownames(GRM) = covariates$id
 genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt")), header = FALSE)[,1]
-gxe_genes = gxe_genes[[tissue]]
+
+results_files = list(head = dir(here::here("eQTLmapping/results/gxe/head"), 
+                                full.names = TRUE),
+                     body = dir(here::here("eQTLmapping/results/gxe/body"), 
+                                full.names = TRUE)) 
+results_df = map(results_files[[tissue]], 
+                 import, select = c("Trait", "snp", "p_gxe", "cis"), 
+                 .progress = 'reading files') |> 
+                 bind_rows() |> 
+                 as_tibble()
+
+# countCisTests = lapply(genes, getCisSnps) |> 
+#       map_dbl(~length(.))
+# export(countCisTests, here::here(paste0("cache/countCisTests_", tissue, ".rds")))
+countCisTests = import(here::here(paste0("cache/countCisTests_", tissue, ".rds")))
+total_cis_test = sum(countCisTests)     
+total_snps = ncol(X)
+total_trans_tests = sum(total_snps - countCisTests)
+
+results_df$p_gxe_adj = NA
+results_df$p_gxe_adj[results_df$cis == 1] = p.adjust(results_df$p_gxe[results_df$cis == 1], method = "BH", n = total_cis_test) 
+results_df$p_gxe_adj[results_df$cis == 0] = p.adjust(results_df$p_gxe[results_df$cis == 0], method = "BH", n = total_trans_tests) 
+
+sig_results_df = results_df |>
+     filter(p_gxe_adj < 0.05)
+enclosing_genes_df = map(unique(sig_results_df$snp), getEnclosingGene, .progress = "Mapping SNPs to genes") |> bind_rows() 
+enclosing_genes_df = as_tibble(enclosing_genes_df)
+
+sig_results_df = results_df |>
+     filter(p_gxe_adj < 0.05) |>
+     left_join(enclosing_genes_df, by = "snp") |>
+     select(Trait, snp, p_gxe, p_gxe_adj, cis, index, enclosingGene) |>
+     as_tibble() 
+export(sig_results_df, here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv")))
+
+gemma_sig_results = import("/Genomics/ayroleslab2/lamaya/bigProject/GXEpaper/HEAD/eQTLmapping/mapping/gxe_covfree_allgenes/resultstable/resultsGEMMA.GxE.CISTRANS.fdr5.headctrlhs.feb21.2021.txt") |> as_tibble()
+
+enclosing_genes_df = map(unique(gemma_sig_results$rs), getEnclosingGene, window = 0, .progress = "Mapping SNPs to genes") |> bind_rows() 
+enclosing_genes_df = as_tibble(enclosing_genes_df)
+enclosing_genes_df |> filter(enclosingGene == "FBgn0264908")
+enclosing_genes_df |>
+     group_by(enclosingGene) |>
+     dplyr::count() |> 
+     arrange(desc(n)) |>
+     filter(n>2) |>
+     print(n = 300)
+inner_join(gemma_sig_results, enclosing_genes_df, by = c("rs" = "snp")) |> 
+     as_tibble()  |>
+     filter(enclosingGene == "FBgn0028704") |>
+     select(rs, p_wald, gene) |>
+     print(n = 300)
+
+inner_join(gemma_sig_results, enclosing_genes_df, by = c("rs" = "snp")) |> 
+     as_tibble()  |>
+     filter(enclosingGene == "FBgn0032151") |>
+     select(rs, p_wald, gene) |>
+     print(n = 300)
+
+gemma_sig_results
+
+joint_gxe_snps = inner_join(sig_results_df, gemma_sig_results, by = c("snp" = "rs")) |> 
+     select(Trait, gene, snp, p_gxe, p_wald) 
+
+png(here::here("tmp/joint_gxe_snps.png"), width = 10, height = 10, units = "in", res = 300)
+ggplot(joint_gxe_snps, aes(x = -log10(p_gxe), y = -log10(p_wald))) +
+     geom_point() +
+     geom_abline(intercept = 0, slope = 1)
+dev.off()
+
+sig_results_df |>
+     group_by(Trait, cis) |>
+     dplyr::count() |>
+     arrange(desc(cis)) |> 
+     print(n = 300)
+length(unique(sig_results_df$Trait))
+
+sig_results_df |>
+     group_by(Trait, cis) |>
+     dplyr::count() |>
+     arrange(desc(cis)) |> 
+     filter(Trait == "FBgn0015035")
 
 # current_gene = gxe_genes[5]
 # current_gene = "FBgn0000579"
-
-global_formulas <- list(
-          head = 
-     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2 + (1|id),
-          body = 
-     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 +         (1|id)
-)
-global_formulas_gemma <- list(
-          head = 
-     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2,
-          body = 
-     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat
-)
-
-runGxEmodel = function(current_gene, tissue, covariates, GRM){
-     old_dir = getwd()
-     setwd(here::here("eQTLmapping"))
-     cache_folder = here::here(paste0('eQTLmapping/cache/'),
-                           tissue, '/',
-                           current_gene)
-     y = t(import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".tsv")), 
-                  skip = which(genes == current_gene), nrows = 1))
-     data = covariates |>
-          mutate(y = y) |>
-          as.data.frame()
-     rownames(data) = data$id
-     V_setup = import(paste0(cache_folder, '/V_setup.rds'))
-     gxe_gwas = GridLMM_GWAS(formula = global_formulas[[tissue]],
-                             test_formula =  ~1 + treatment,
-                             reduced_formula = ~1,
-                             data = data,
-                             X = X,
-                             X_ID = 'id',
-                             relmat = list(id = list(K = GRM)),
-                             V_setup = V_setup,
-                             method = 'REML',
-                             mc.cores = 1,
-                             verbose = F)
-     setwd(old_dir)
-     results = gxe_gwas$results
-     out_file = results |>
-          mutate(Trait = current_gene) |>
-          rename(snp = X_ID,
-                 p_main = p_value_REML.1,
-                 p_gxe = p_value_REML.2) |>
-          select(Trait, snp,  p_main, p_gxe) |> 
-          as_tibble()
-     qvalues = qvalue(out_file$p_gxe, fdr.level = 0.1)
-     out_file = out_file |> 
-          mutate(q_gxe = qvalues$qvalues) 
-     return(out_file)
-}
 
 # results = vector("list", length = length(gxe_genes))
 # k = 1
@@ -182,27 +203,39 @@ plotManhattan <- function(res, gene, signCut, tissue){
 plotManhattan(res, gene, signCut, tissue)
 # map2(results, gxe_genes, plotManhattan, signCut, tissue, .progress = "Manhattan Plots")
 
-x = as_tibble(tx) |>
+x = as_tibble(gene_locations_GR) |>
      filter(seqnames %in% paste0("chr", chrs))
 x$gene_id = unlist(x$gene_id)
 x = x[!duplicated(x$gene_id),]
 
-tx.git  = GNCList(tx)
+tx.git  = GNCList(gene_locations_GR)
 
+sig_results_df = results_df |>
+     filter(p_gxe_adj < 0.05) |>
+     left_join(enclosing_genes_df, by = "snp") |>
+     select(Trait, snp, p_gxe, p_gxe_adj, cis, index, enclosingGene) |>
+     as_tibble() 
+
+sig_results_df = gemma_sig_results %>%
+     rename(Trait = gene, 
+               snp = rs, 
+               p_gxe = p_wald, 
+               p_gxe_adj = fdr) |>
+     select(Trait, snp, p_gxe, p_gxe_adj)
+
+gemma_sig_results
 
 # Bind all results, filter for significant qvalues at 1%
-qtl_pos = bind_rows(results) |>
-    filter(q_gxe < 0.005) |>
-     arrange(q_gxe) |>
+qtl_pos = sig_results_df |>
      separate(snp, c("chr", "bp"), sep = "_") |>
-     select(Trait:p_main) |>
+     select(Trait:p_gxe_adj) |>
      left_join(x, by = c("Trait" = "gene_id")) |>
-     select(Trait, seqnames, start, chr, bp, p_main) |>
+     select(Trait, seqnames, start, chr, bp, p_gxe) |>
      mutate(seqnames = gsub("chr", "", seqnames)) |>
      mutate(chr = factor(chr, levels = chrs),
             seqnames = factor(seqnames, levels = chrs),
             bp = as.numeric(bp), 
-            log10p = -log10(p_main)) |>
+            log10p = -log10(p_gxe)) |>
      filter(!is.na(seqnames))
 
  data_cum_snp <- qtl_pos %>% 
@@ -250,6 +283,9 @@ qtl_g_over_df = as_tibble(qtl_gene_overlap) |>
      mutate(seqnames = gsub("chr", "", seqnames), 
             gene_id = unlist(gene_id))
 
+filter(qtl_g_over_df, gene_id == "FBgn0264908")
+filter(qtl_g_over_df, gene_id == "FBgn0000114") |> select(trait, gene_id) |> unique()
+
 hotspot_count = as_tibble(qtl_gene_overlap) |>
      mutate(seqnames = gsub("chr", "", seqnames), 
             gene_id = unlist(gene_id)) |>
@@ -260,9 +296,9 @@ hotspot_count = as_tibble(qtl_gene_overlap) |>
      group_by(gene_id) |>
      dplyr::count() |>
      arrange(desc(n)) |>
-     head(20)
+     filter(n > 2)
 
-gene_pos = as_tibble(tx) |>
+gene_pos = as_tibble(gene_locations_GR) |>
      filter(seqnames %in% paste0("chr", chrs))
 gene_pos$gene_id = unlist(x$gene_id)
 gene_pos = gene_pos[!duplicated(gene_pos$gene_id),]
@@ -275,15 +311,17 @@ hotspot$cum_start = hotspot$start +  data_cum_snp[match(hotspot$seqnames, data_c
 hotspot$cum_end = hotspot$end +  data_cum_snp[match(hotspot$seqnames, data_cum_snp$chr),]$bp_add
 hotspot = unique(hotspot)
 
-png("test.png", width = 10, height = 10, units = "in", res = 300)
-ggplot(qtl_pos, aes(bp_cum, start_cum, color = chr)) +
-    geom_point(size = 0.1, aes(alpha = log10p)) +
-    geom_vline(data = hotspot, aes(xintercept= cum_start), linetype = "dashed", linewidth = 0.2) +
-     geom_vline(data = hotspot, aes(xintercept= cum_end), linetype = "dashed", linewidth = 0.2) +
+png(here::here("tmp/eQTL_GxE_pos_gemma.png"), width = 10, height = 10, units = "in", res = 300)
+ggplot(qtl_pos, aes(bp_cum, start_cum)) +
+    geom_point(size = 0.5) +
+    geom_vline(data = data_cum, aes(xintercept = start_add), linetype = "dashed", linewidth = 0.2) +
+    geom_hline(data = data_cum, aes(yintercept = start_add), linetype = "dashed", linewidth = 0.2) +
+    geom_vline(data = hotspot, aes(xintercept= cum_start), linetype = "dashed", linewidth = 0.2, color = 2) +
+    geom_vline(data = hotspot, aes(xintercept= cum_end), linetype = "dashed", linewidth = 0.2, color = 2) +
      #annotate("text", x = hs_start + 10e5, y = 1000 , label = "pHCl-1", vjust = 1, hjust = 0) +
     theme_classic() +
     labs(x = "eQTL position", y = "Gene position") +
-    geom_abline(intercept = 0, slope = 1) 
+    geom_abline(intercept = 0, slope = 1, linewidth = 0.2, alpha = 0.5) 
 dev.off()
 
 
