@@ -197,3 +197,12 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
           mutate(q_gxe = qvalues$qvalues) 
      return(out_file)
 }
+
+# convert flybase id to gene symbol
+fly2sym = function(flybase){
+bitr(flybase, 
+             fromType="FLYBASE", 
+             toType = "SYMBOL",
+             OrgDb = org.Dm.eg.db, 
+             drop = FALSE)
+}

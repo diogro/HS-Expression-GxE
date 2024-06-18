@@ -6,14 +6,16 @@ DiffExpAll = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-
 
 DiffExp = DiffExpAll$vicar %>% filter(tissue == "head") %>% as_tibble()
 
+eQTL_GxE = import(here::here("output/significant_gxe_eqtl_head.tsv"))
+
 head = import(here::here("SBM/snakemake/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))
-block_summary_clip = import(here::here("cache/clip/blockSummary_clip_fdr-1e2_head.csv"))
+block_summary_clip = import(here::here("output/blockSummary_clip_fdr-1e2_head.csv"))
 
 block_summary = import(here::here("SBM/snakemake/cache/GO/fdr-1e-3/layered/head/blockSummary.csv")) 
 
-block_summary_clip = import(here::here("cache/clip/blockSummary_clip_fdr-1e2_head.csv"))
+block_summary_clip = import(here::here("output/blockSummary_clip_fdr-1e2_head.csv"))
 block_summary_clip = block_summary_clip |> 
-    filter(Nested_Level == 1, Direction == "decohere") |>
+    filter(Nested_Level == 2, Direction == "decohere") |>
     arrange(Nested_Level, desc(Total_degree))
 head(block_summary_clip, 20)
 
@@ -25,6 +27,34 @@ block_median = inner_join(DiffExp, select(head, Gene, B2), by = join_by(Geneid =
 block_median$B2 = factor(block_median$B2, levels = block_median$B2)   
 DiffSBM$B2 = factor(DiffSBM$B2, levels = block_median$B2)
 DE_blocks = block_median[block_median$median > 5,]
+
+GO_b2_blocks = block_summary |> filter(Nested_Level == 2, n_enrich > 0)
+DiffSBM$is_enriched = DiffSBM$B2 %in% GO_b2_blocks$Block
+
+
+p = DiffSBM %>%
+    ggplot(aes(B2, -log(lfdr), group = B2)) + 
+    geom_boxplot(aes(fill = is_enriched, color = is_enriched)) +
+    geom_point(data = block_median, aes(B2, median)) + 
+    theme_classic(12) + labs(x = "SBM Block", y = "Differential Expression (-log(lfdr))") + theme(axis.text.x = element_text(angle = 45), legend.position = c(0.8, 0.9)) + 
+    geom_hline(yintercept = 5, linetype = "dashed", color = 2)
+
+save_plot(here::here("output/DEvsSBM.png"), p, base_width = 10, base_height = 6)
+
+
+block_summary_clip$Block = factor(block_summary_clip$Block, levels = block_median$B2)
+png(here::here("output/DEvsSBM_clip.png"), width = 10, height = 6, units = "in", res = 300)
+inner_join(block_summary_clip, block_median, by = c("Block" = "B2")) |> 
+    ggplot(aes(Average_total_degree, median, color = median > 5)) + 
+    geom_point() + 
+    geom_smooth(method = "lm") +
+    theme_classic() + labs(x = "Total Degree", y = "Median -log(lfdr)")
+dev.off()
+
+#####################
+# Correlation stuff
+#####################
+
 
 clip_corrs = import(here::here("cache/long_clip.csv"))
 all_corrs = import(here::here("cache/long_corrs.csv")) 
@@ -48,9 +78,6 @@ gene2_DE = clip_corrs$Gene2 %in% DE_genes
 clip_corrs$DE = gene1_DE & gene2_DE
 DE_corrs = filter(clip_corrs, DE) |> select(-DE)
 
-
-
-
 classifyCorrBlock = function(x, blockSummary, level){   
     block_col = paste("B", level, sep = "")
     gene1_block = blockSummary[[block_col]][match(x$Gene1, blockSummary$Gene)]
@@ -63,15 +90,7 @@ p = pivot_longer(DE_corrs, ctrl:hs, names_to = "treatment", values_to =  "correl
     geom_boxplot() 
 save_plot(here::here("output/corrTreatmentSBM.png"), p, base_width = 10, base_height = 6)
 
-p = DiffSBM %>%
-    ggplot(aes(B2, -log(lfdr), group = B2)) + 
-    geom_boxplot(aes(fill = is_enriched, color = is_enriched)) +
-    geom_point(data = block_median, aes(B2, median)) + 
-    geom_line(data = block_median, aes(B2, median)) + 
-    theme_classic(12) + labs(x = "SBM Block", y = "Differential Expression (-log(lfdr))") + theme(axis.text.x = element_text(angle = 45), legend.position = c(0.8, 0.9)) + 
-    geom_hline(yintercept = 5, linetype = "dashed", color = 2)
 
-save_plot(here::here("output/DEvsSBM.png"), p, base_width = 10, base_height = 6)
 
 
 p = ggplot() + 

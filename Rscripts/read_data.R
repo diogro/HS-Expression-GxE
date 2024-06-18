@@ -187,7 +187,8 @@ makeResidualsMwash <- function(data){
     counts_list = list(cpm = data$cpm, 
                        voom = data$voom$E, 
                        l2c = data$l2c)
-    data$mwash_residuals <- future_map2(counts_list[data$n.sva!=0], names(counts_list)[data$n.sva!=0], 
+    data$mwash_residuals <- future_map2(counts_list[data$n.sva!=0], 
+                                        names(counts_list)[data$n.sva!=0], 
                             \(x, y) getBatchResiduals(x, paste0(y, "-mwash"), data$tissue, 
                                                       data$design, data$mod0, sva = data$mwash[[y]]$Zhat,
                                                       treatment = pull(covariates, treatment)))  

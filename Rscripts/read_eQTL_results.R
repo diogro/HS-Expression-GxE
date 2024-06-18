@@ -22,54 +22,71 @@ GRM = import(here::here(paste0("eQTLmapping/GRMs/", tissue, ".cXX.txt")), header
 colnames(GRM) = rownames(GRM) = covariates$id
 genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt")), header = FALSE)[,1]
 
-results_files = list(head = dir(here::here("eQTLmapping/results/gxe/head"), 
-                                full.names = TRUE),
-                     body = dir(here::here("eQTLmapping/results/gxe/body"), 
-                                full.names = TRUE)) 
-results_df = map(results_files[[tissue]], 
-                 import, select = c("Trait", "snp", "p_gxe", "cis"), 
-                 .progress = 'reading files') |> 
-                 bind_rows() |> 
-                 as_tibble()
+# results_files = list(head = dir(here::here("eQTLmapping/results/gxe/head"), 
+#                                 full.names = TRUE),
+#                      body = dir(here::here("eQTLmapping/results/gxe/body"), 
+#                                 full.names = TRUE)) 
+# results_df = map(results_files[[tissue]], 
+#                  import, select = c("Trait", "snp", "p_gxe", "cis"), 
+#                  .progress = 'reading files') |> 
+#                  bind_rows() |> 
+#                  as_tibble()
 
-# countCisTests = lapply(genes, getCisSnps) |> 
-#       map_dbl(~length(.))
-# export(countCisTests, here::here(paste0("cache/countCisTests_", tissue, ".rds")))
-countCisTests = import(here::here(paste0("cache/countCisTests_", tissue, ".rds")))
-total_cis_test = sum(countCisTests)     
-total_snps = ncol(X)
-total_trans_tests = sum(total_snps - countCisTests)
+# # countCisTests = lapply(genes, getCisSnps) |> 
+# #       map_dbl(~length(.))
+# # export(countCisTests, here::here(paste0("cache/countCisTests_", tissue, ".rds")))
+# countCisTests = import(here::here(paste0("cache/countCisTests_", tissue, ".rds")))
+# total_cis_test = sum(countCisTests)     
+# total_snps = ncol(X)
+# total_trans_tests = sum(total_snps - countCisTests)
 
-results_df$p_gxe_adj = NA
-results_df$p_gxe_adj[results_df$cis == 1] = p.adjust(results_df$p_gxe[results_df$cis == 1], method = "BH", n = total_cis_test) 
-results_df$p_gxe_adj[results_df$cis == 0] = p.adjust(results_df$p_gxe[results_df$cis == 0], method = "BH", n = total_trans_tests) 
+# results_df$p_gxe_adj = NA
+# results_df$p_gxe_adj[results_df$cis == 1] = p.adjust(results_df$p_gxe[results_df$cis == 1], method = "BH", n = total_cis_test) 
+# results_df$p_gxe_adj[results_df$cis == 0] = p.adjust(results_df$p_gxe[results_df$cis == 0], method = "BH", n = total_trans_tests) 
 
-sig_results_df = results_df |>
-     filter(p_gxe_adj < 0.05)
-enclosing_genes_df = map(unique(sig_results_df$snp), getEnclosingGene, .progress = "Mapping SNPs to genes") |> bind_rows() 
-enclosing_genes_df = as_tibble(enclosing_genes_df)
+# sig_results_df = results_df |>
+#      filter(p_gxe_adj < 0.05)
+# enclosing_genes_df = map(unique(sig_results_df$snp), getEnclosingGene, .progress = "Mapping SNPs to genes") |> bind_rows() 
+# enclosing_genes_df = as_tibble(enclosing_genes_df)
 
-sig_results_df = results_df |>
-     filter(p_gxe_adj < 0.05) |>
-     left_join(enclosing_genes_df, by = "snp") |>
-     select(Trait, snp, p_gxe, p_gxe_adj, cis, index, enclosingGene) |>
-     as_tibble() 
-export(sig_results_df, here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv")))
+# sig_results_df = results_df |>
+#      filter(p_gxe_adj < 0.05) |>
+#      left_join(enclosing_genes_df, by = "snp") |>
+#      select(Trait, snp, p_gxe, p_gxe_adj, cis, index, enclosingGene) |>
+#      as_tibble() 
+# export(sig_results_df, here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv")))
+sig_results_df = import(here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv")))
 
-gemma_sig_results = import("/Genomics/ayroleslab2/lamaya/bigProject/GXEpaper/HEAD/eQTLmapping/mapping/gxe_covfree_allgenes/resultstable/resultsGEMMA.GxE.CISTRANS.fdr5.headctrlhs.feb21.2021.txt") |> as_tibble()
+gemma_sig_results = import("/Genomics/ayroleslab2/lamaya/bigProject/GXEpaper/HEAD/eQTLmapping/mapping/gxe_covfree_allgenes/resultstable/resultsGEMMA.GxE.CISTRANS.fdr5.headctrlhs.feb21.2021.txt") |> mutate(chr = gsub("23", "X", chr)) |> as_tibble()
 
 enclosing_genes_df = map(unique(gemma_sig_results$rs), getEnclosingGene, window = 0, .progress = "Mapping SNPs to genes") |> bind_rows() 
 enclosing_genes_df = as_tibble(enclosing_genes_df)
+
 enclosing_genes_df |> filter(enclosingGene == "FBgn0264908")
+
+# Manual count os SNPs in FBgn0264908
+gemma_sig_results |>
+     filter(chr == "3L") |>
+     filter(ps > 15848578, ps < 15899029) |>
+     select(chr, rs, ps, gene, enclosingGene) |>
+     group_by(rs) |>
+     dplyr::count() 
+
+gemma_sig_results = inner_join(gemma_sig_results, enclosing_genes_df, by = c("rs" = "snp")) |> 
+     as_tibble() 
+
+gemma_sig_results |> filter(chr == "4") |> select(chr, rs, id, gene, enclosingGene) |> 
+     print(n = 300) 
+
+
 enclosing_genes_df |>
      group_by(enclosingGene) |>
      dplyr::count() |> 
      arrange(desc(n)) |>
      filter(n>2) |>
      print(n = 300)
-inner_join(gemma_sig_results, enclosing_genes_df, by = c("rs" = "snp")) |> 
-     as_tibble()  |>
-     filter(enclosingGene == "FBgn0028704") |>
+
+filter(gemma_sig_results,enclosingGene == "FBgn0028704") |>
      select(rs, p_wald, gene) |>
      print(n = 300)
 
@@ -221,7 +238,7 @@ sig_results_df = gemma_sig_results %>%
                snp = rs, 
                p_gxe = p_wald, 
                p_gxe_adj = fdr) |>
-     select(Trait, snp, p_gxe, p_gxe_adj)
+     select(Trait, chr, snp, p_gxe, p_gxe_adj)
 
 gemma_sig_results
 
@@ -230,7 +247,7 @@ qtl_pos = sig_results_df |>
      separate(snp, c("chr", "bp"), sep = "_") |>
      select(Trait:p_gxe_adj) |>
      left_join(x, by = c("Trait" = "gene_id")) |>
-     select(Trait, seqnames, start, chr, bp, p_gxe) |>
+     select(Trait, seqnames, start, end, chr, bp, p_gxe) |>
      mutate(seqnames = gsub("chr", "", seqnames)) |>
      mutate(chr = factor(chr, levels = chrs),
             seqnames = factor(seqnames, levels = chrs),
@@ -244,6 +261,15 @@ qtl_pos = sig_results_df |>
     mutate(bp_add = lag(cumsum(max_bp), default = 0)) %>% 
     select(chr, bp_add)
 
+ data_cum <- qtl_pos %>% 
+    group_by(seqnames) %>% 
+    summarise(max_start = max(start)) %>% 
+    mutate(start_add = lag(cumsum(max_start), default = 0)) %>% 
+    select(seqnames, start_add)
+
+data_cum$start_add = map2_dbl(data_cum$start_add, data_cum_snp$bp_add, max)
+data_cum_snp$bp_add = map2_dbl(data_cum$start_add, data_cum_snp$bp_add, max)
+
 qtl_pos <- qtl_pos %>% 
     inner_join(data_cum_snp, by = "chr") %>% 
     mutate(bp_cum = bp + bp_add)
@@ -256,12 +282,6 @@ qtl_pos |>
 qtl_pos |>
      group_by(chr) |>
      dplyr::count()
-
- data_cum <- qtl_pos %>% 
-    group_by(seqnames) %>% 
-    summarise(max_start = max(start)) %>% 
-    mutate(start_add = lag(cumsum(max_start), default = 0)) %>% 
-    select(seqnames, start_add)
 
 qtl_pos <- qtl_pos %>% 
     inner_join(data_cum, by = "seqnames") %>% 
@@ -311,13 +331,13 @@ hotspot$cum_start = hotspot$start +  data_cum_snp[match(hotspot$seqnames, data_c
 hotspot$cum_end = hotspot$end +  data_cum_snp[match(hotspot$seqnames, data_cum_snp$chr),]$bp_add
 hotspot = unique(hotspot)
 
-png(here::here("tmp/eQTL_GxE_pos_gemma.png"), width = 10, height = 10, units = "in", res = 300)
+png(here::here("tmp/eQTL_GxE_pos.png"), width = 10, height = 10, units = "in", res = 300)
 ggplot(qtl_pos, aes(bp_cum, start_cum)) +
     geom_point(size = 0.5) +
     geom_vline(data = data_cum, aes(xintercept = start_add), linetype = "dashed", linewidth = 0.2) +
     geom_hline(data = data_cum, aes(yintercept = start_add), linetype = "dashed", linewidth = 0.2) +
-    geom_vline(data = hotspot, aes(xintercept= cum_start), linetype = "dashed", linewidth = 0.2, color = 2) +
-    geom_vline(data = hotspot, aes(xintercept= cum_end), linetype = "dashed", linewidth = 0.2, color = 2) +
+    #geom_vline(data = hotspot, aes(xintercept= cum_start), linetype = "dashed", linewidth = 0.2, color = 2) +
+    #geom_vline(data = hotspot, aes(xintercept= cum_end), linetype = "dashed", linewidth = 0.2, color = 2) +
      #annotate("text", x = hs_start + 10e5, y = 1000 , label = "pHCl-1", vjust = 1, hjust = 0) +
     theme_classic() +
     labs(x = "eQTL position", y = "Gene position") +
@@ -330,11 +350,108 @@ filter(qtl_pos, bp_cum > hs_start, bp_cum < hs_end) |>
      group_by(Trait) |>
      dplyr::count()
 
-# Create a GRanges object
+# SNP validation plot
 
-## Convert chr to numeric
+rnaseq[[tissue]] |> names()
 
-grid = results[[which(gxe_genes == "FBgn0004396")]]
+data_set = "l2c"
+
+gemma_sig_results_df = gemma_sig_results %>%
+     rename(Trait = gene, 
+               snp = rs, 
+               p_gxe = p_wald, 
+               p_gxe_adj = fdr) |>
+     select(Trait, chr, snp, p_gxe, p_gxe_adj)
+
+top_snps = sig_results_df %>% 
+  mutate(chr = snp) |>
+  separate(chr, c("chr", "pos"), sep = "_") |>
+  group_by(Trait, chr, cis) %>%
+  slice(which.min(p_gxe)) |>
+  arrange(p_gxe) |>
+  select(Trait, chr, pos, snp, p_gxe, cis, enclosingGene) |>
+  print(n = 300)
+
+
+plot_GxE_eQTL <- function(current_snp, gene = NULL, snp_table = sig_results_df){
+
+     if(is.null(gene)){
+          current_gene = snp_table |> 
+               filter(snp == current_snp) |> 
+               select(Trait) |> 
+               pull()
+     } else {
+          current_gene = gene
+     }
+     if(length(current_gene) > 1){
+         out_plots = vector("list", length = length(current_gene))
+         for(i in seq_along(current_gene)){
+             out_plots[[i]] = plot_GxE_eQTL(current_snp, gene = current_gene[i], snp_table)
+         }
+         return(out_plots)
+     }
+
+     pheno = rnaseq[[tissue]][["mwash_residuals"]][[data_set]][current_gene, covariates$id]
+     data_rna = covariates
+     data_rna$y = pheno
+     m1 = lm(global_formulas_gemma[[tissue]], data = data_rna) 
+     data_rna$residuals = residuals(m1)
+     data_rna$snp = as.factor(X[covariates$id,current_snp])
+     data_rna$treatment = c("ctrl", "hs")[data_rna$treatment + 1]
+
+     out_folder = here::here(paste0("output/snp_validation/", data_set))
+     if(!dir.exists(out_folder)){
+          dir.create(out_folder, recursive = TRUE)
+     }
+     
+     enclosing_gene = filter(snp_table, snp == current_snp) |> 
+          select(enclosingGene) |> 
+          pull()
+     if(!grepl("FBgn", enclosing_gene[[1]])){
+          enclosing_gene = "No gene"
+     } else {
+          enclosing_gene = paste("Enclosing gene:", fly2sym(enclosing_gene)$SYMBOL[[1]])
+     }
+     current_symbol = tryCatch(fly2sym(current_gene)$SYMBOL[[1]], error = function(e) "No symbol")
+
+     cis = filter(snp_table, snp == current_snp, Trait == current_gene) |> 
+          select(cis) |> 
+          pull()
+     cis = c("trans", "cis")[cis + 1]
+     if(length(cis) > 1){
+          cis = cis[1]
+     }
+     out_file = paste0(out_folder, "/", current_snp, "_", current_gene, "_", cis, ".png")
+
+     # ggplot(data_eqtl, aes(x = snp, y = residuals, color = treatment, group = interaction(snp, treatment))) +
+     #      geom_jitter(position=position_jitterdodge(dodge.width=0.75, jitter.width = 0.1)) +
+     #      geom_boxplot(color = "black", fill = "transparent", outlier.shape = NA) +
+     #      labs(x = paste("SNP -", current_snp), y = paste("Expression -", current_gene)) +
+     #      theme_classic() + ggtitle("log2 counts") + 
+     out_plot = ggplot(data_rna, 
+                       aes(x = treatment, y = residuals, 
+                           fill = snp, 
+                           group = interaction(snp, treatment))) +
+          geom_jitter(position=position_jitterdodge(dodge.width=0.75, jitter.width = 0.2), shape = 21, size = 1) +
+          geom_boxplot(color = "black", fill = "transparent", outlier.shape = NA) +
+          scale_fill_manual(values = c("#edae49", "#d1495b", "#00798c"), 
+                             name = paste0("SNP: ", current_snp, "\n", 
+                                           enclosing_gene, 
+                                           "\nIn ", cis)) +
+          labs(x = "Condition", y = paste("Expression of", current_gene, "-", current_symbol)) +
+          theme_cowplot(12)
+     save_plot(out_file, out_plot, base_width = 7, base_height = 5)
+     return(out_plot)
+}
+current_snp = "2L_9641895"
+current_snp = top_snps$snp[18]
+plot_GxE_eQTL("2R_17734962")
+plot_GxE_eQTL(top_snps$snp[18])
+
+walk(top_snps$snp, plot_GxE_eQTL)
+## Gemma grid comparison:
+
+grid = runGxEmodel('FBgn0004396', tissue, covariates, GRM)
 gemma_results = import(here::here("eQTLmapping/cache/gemma/head/FBgn0004396/output/gemma.assoc.txt"))
 
 head(gemma_results)
