@@ -156,7 +156,7 @@ global_formulas_gemma <- list(
           head = 
      y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2,
           body = 
-     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat
+     y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1
 )
 
 runGxEmodel = function(current_gene, tissue, covariates, GRM){
@@ -205,4 +205,149 @@ bitr(flybase,
              toType = "SYMBOL",
              OrgDb = org.Dm.eg.db, 
              drop = FALSE)
+}
+
+plot_GxE_eQTL <- function(current_snp, gene = NULL, snp_table = sig_results_df){
+
+     if(is.null(gene)){
+          current_gene = snp_table |> 
+               filter(snp == current_snp) |> 
+               select(Trait) |> 
+               pull()
+     } else {
+          current_gene = gene
+     }
+     if(length(current_gene) > 1){
+         out_plots = vector("list", length = length(current_gene))
+         for(i in seq_along(current_gene)){
+             out_plots[[i]] = plot_GxE_eQTL(current_snp, gene = current_gene[i], snp_table)
+         }
+         return(out_plots)
+     }
+
+     pheno = rnaseq[[tissue]][["mwash_residuals"]][[data_set]][current_gene, covariates$id]
+     data_rna = covariates
+     data_rna$y = pheno
+     m1 = lm(global_formulas_gemma[[tissue]], data = data_rna) 
+     data_rna$residuals = residuals(m1)
+     data_rna$snp = as.factor(X[covariates$id,current_snp])
+     data_rna$treatment = c("ctrl", "hs")[data_rna$treatment + 1]
+
+     out_folder = here::here(paste0("output/snp_validation/", tissue, "/", data_set))
+     if(!dir.exists(out_folder)){
+          dir.create(out_folder, recursive = TRUE)
+     }
+     
+     enclosing_gene = filter(snp_table, snp == current_snp) |> 
+          select(enclosingGene) |> 
+          pull()
+     if(!grepl("FBgn", enclosing_gene[[1]])){
+          enclosing_gene = "No gene"
+     } else {
+          enclosing_gene = paste("Enclosing gene:", fly2sym(enclosing_gene)$SYMBOL[[1]])
+     }
+     current_symbol = tryCatch(fly2sym(current_gene)$SYMBOL[[1]], error = function(e) "No symbol")
+
+     cis = filter(snp_table, snp == current_snp, Trait == current_gene) |> 
+          select(cis) |> 
+          pull()
+     cis = c("trans", "cis")[cis + 1]
+     if(length(cis) > 1){
+          cis = cis[1]
+     }
+     out_file = paste0(out_folder, "/", current_snp, "_", current_gene, "_", cis, ".png")
+
+     # ggplot(data_eqtl, aes(x = snp, y = residuals, color = treatment, group = interaction(snp, treatment))) +
+     #      geom_jitter(position=position_jitterdodge(dodge.width=0.75, jitter.width = 0.1)) +
+     #      geom_boxplot(color = "black", fill = "transparent", outlier.shape = NA) +
+     #      labs(x = paste("SNP -", current_snp), y = paste("Expression -", current_gene)) +
+     #      theme_classic() + ggtitle("log2 counts") + 
+     out_plot = ggplot(data_rna, 
+                       aes(x = treatment, y = residuals, 
+                           fill = snp, 
+                           group = interaction(snp, treatment))) +
+          geom_jitter(position=position_jitterdodge(dodge.width=0.75, jitter.width = 0.2), shape = 21, size = 1) +
+          geom_boxplot(color = "black", fill = "transparent", outlier.shape = NA) +
+          scale_fill_manual(values = c("#edae49", "#d1495b", "#00798c"), 
+                             name = paste0("SNP: ", current_snp, "\n", 
+                                           enclosing_gene, 
+                                           "\nIn ", cis)) +
+          labs(x = "Condition", y = paste("Expression of", current_gene, "-", current_symbol)) +
+          theme_cowplot(12)
+     save_plot(out_file, out_plot, base_width = 7, base_height = 5)
+     return(out_plot)
+}
+
+plotManhattan <- function(res, gene, signCut, tissue){
+    qvalues = qvalue(res$p_gxe, fdr.level = 0.1)
+    res = res |> 
+          mutate(q_gxe = qvalues$qvalues) |>
+          arrange(q_gxe)
+    res = res |>
+        mutate(log_p_gxe = -log10(p_gxe)) |>
+        separate(snp, c("chr", "bp"), sep = "_") |>
+        mutate(chr = factor(chr, levels = chrs),
+                bp = as.numeric(bp)) |>
+        arrange(q_gxe) 
+
+    gwas_data_load = res
+    sig_data <- gwas_data_load %>% 
+    subset(q_gxe < signCut)
+    notsig_data <- gwas_data_load %>% 
+    subset(q_gxe >= signCut) %>%
+    group_by(chr) %>% 
+    sample_frac(0.5)
+    gwas_data <- bind_rows(sig_data, notsig_data)
+
+    data_cum <- gwas_data %>% 
+    group_by(chr) %>% 
+    summarise(max_bp = max(bp)) %>% 
+    mutate(bp_add = lag(cumsum(max_bp), default = 0)) %>% 
+    select(chr, bp_add)
+
+    gwas_data <- gwas_data %>% 
+    inner_join(data_cum, by = "chr") %>% 
+    mutate(bp_cum = bp + bp_add)
+
+    axis_set <- gwas_data %>% 
+    filter(chr != 4) %>%
+    group_by(chr) %>% 
+    summarize(center = mean(bp_cum))
+
+    ylim <- gwas_data %>% 
+    filter(p_gxe == min(p_gxe)) %>% 
+    mutate(ylim = abs(floor(log10(p_gxe))) + 2) %>% 
+    pull(ylim)
+
+    manhplot <- ggplot(filter(gwas_data, q_gxe < signCut, chr != 4), aes(x = bp_cum, y = -log10(p_gxe), 
+                                    color = chr)) +
+    geom_hline(yintercept = -log10(signCut), color = "grey40", linetype = "dashed") + 
+    geom_point(alpha = 0.7, size = 0.005) +
+    geom_point(data = filter(gwas_data, q_gxe > signCut), alpha = 0.75, size = 0.005, color = "grey") +
+    scale_x_continuous(label = axis_set$chr, breaks = axis_set$center) +
+    scale_y_continuous(expand = c(0,0), limits = c(0, ylim), breaks = seq(0, 10, 1)) +
+    scale_color_manual(values = rep(c("#276FBF", "#183059"), unique(length(axis_set$chr)))) +
+    scale_size_continuous(range = c(0.5,3)) +
+    labs(x = "Chromosome", 
+        y = expression("-log10(" ~ p[GxE] ~ ")")) + 
+    theme_classic() +
+    theme( 
+        legend.position = "none",
+        #panel.grid.major.x = element_blank(),
+        #panel.grid.minor.x = element_blank(),
+        #axis.title.y = element_markdown(),axis.line = element_line(color = 'black'), 
+        plot.title = element_text(size = 10), 
+        axis.text = element_text(size = 7), 
+        axis.text.x = element_text(size = 7, vjust = 0.5),
+        axis.title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8)
+    )
+    plot_folder = here::here(file.path("tmp/eQTL_GxE/plots", tissue))
+    # Check if exists and create plot_folder
+    if(!dir.exists(plot_folder)){
+    dir.create(plot_folder, recursive = TRUE)
+    }
+    save_plot(paste0(plot_folder, "/", gene, ".png"), manhplot, base_width = 7)
+    return(manhplot)
 }
