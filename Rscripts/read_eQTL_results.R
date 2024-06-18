@@ -6,7 +6,7 @@ rnaseq = import(here::here("cache/rnaseq_all_2024-03-21.rds"))
 
 source(here::here("eQTLmapping/scripts/snpPosClassify.R"))
              
-tissue = 'body'
+tissue = 'head'
 
 Xp = read.plink(here::here(paste0("eQTLmapping/bed_files/", tissue)))
 X = as(Xp$genotypes,'numeric') 
