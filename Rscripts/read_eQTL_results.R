@@ -55,7 +55,7 @@ genes = import(here::here(paste0("eQTLmapping/phenotypes/", tissue, ".genes.txt"
 #      select(Trait, snp, p_gxe, p_gxe_adj, cis, index, enclosingGene) |>
 #      as_tibble() 
 # export(sig_results_df, here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv")))
-sig_results_df = import(here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv")))
+sig_results_df = import(here::here(paste0("output/significant_gxe_eqtl_", tissue, ".tsv"))) |> as_tibble()    
 
 gemma_sig_results = import("/Genomics/ayroleslab2/lamaya/bigProject/GXEpaper/HEAD/eQTLmapping/mapping/gxe_covfree_allgenes/resultstable/resultsGEMMA.GxE.CISTRANS.fdr5.headctrlhs.feb21.2021.txt") |> mutate(chr = gsub("23", "X", chr)) |> as_tibble()
 
@@ -69,7 +69,19 @@ gemma_sig_results |>
      filter(chr == "3L") |>
      filter(ps > 15848578, ps < 15899029) |>
      select(chr, rs, ps, gene, enclosingGene) |>
-     group_by(rs) |>
+     group_by(gene) |>
+     dplyr::count() 
+
+sig_results_df |>
+    filter(enclosingGene == "FBgn0264908") |>
+     select(snp, Trait, enclosingGene) |>
+     group_by(Trait) |>
+     dplyr::count() 
+
+sig_results_df |>
+    filter(enclosingGene == "FBgn0264908") |>
+     select(snp, Trait, enclosingGene) |>
+     group_by(snp) |>
      dplyr::count() 
 
 gemma_sig_results = inner_join(gemma_sig_results, enclosing_genes_df, by = c("rs" = "snp")) |> 

@@ -118,7 +118,7 @@ chrs <- c("2L", "2R", "3L", "3R", "4", "X")
 #   mutate(chr = paste0("chr", as.character(chr))) |>
 #   mutate(bp = as.numeric(bp))
 # export(snp_pos, file = here::here("cache/snp_pos.rds"))
-snp_pos = import(here::here("cache/snp_pos.rds"))
+snp_pos = import(here::here("cache/snp_pos.rds"), trust = TRUE)
 
 getCisSnps = function(transcript, window = 10000, snps = snp_pos){
   snp_GR <- GRanges(
@@ -146,6 +146,17 @@ getEnclosingGene <- function(snp, all_snps = snp_pos, window = 0){
   }
 }
 
+#   c_snp_GR = GRanges(
+#     seqnames = snp_pos$chr,
+#     ranges = IRanges(snp_pos$bp, end = snp_pos$bp, 
+#                      names = snp_pos$rs))
+#   gene_location = gene_locations_GR + 0
+#   overlap = findOverlaps(c_snp_GR, gene_location)@to
+#   enclosingGene = gene_location[overlap]$gene_id
+
+#   snps_with_genes = data.frame(snp = snp_pos$rs[findOverlaps(c_snp_GR, gene_location)@from], enclosingGene = enclosingGene) |> unique()
+# export(snps_with_genes, file = here::here("cache/snps_with_genes.tsv"))
+
 global_formulas <- list(
           head = 
      y ~ 1 + egglayBatch + RNAseqBatch + platingBatch + RNAlibBatch + treatment + Zhat1 + Zhat2 + (1|id),
@@ -171,7 +182,7 @@ runGxEmodel = function(current_gene, tissue, covariates, GRM){
           mutate(y = y) |>
           as.data.frame()
      rownames(data) = data$id
-     V_setup = import(paste0(cache_folder, '/V_setup.rds'))
+     V_setup = import(paste0(cache_folder, '/V_setup.rds'), trust = TRUE)
      gxe_gwas = GridLMM_GWAS(formula = global_formulas[[tissue]],
                              test_formula =  ~1 + treatment,
                              reduced_formula = ~1,

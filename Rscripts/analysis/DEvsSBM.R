@@ -6,6 +6,23 @@ DiffExpAll = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-
 
 DiffExp = DiffExpAll$vicar %>% filter(tissue == "head") %>% as_tibble()
 
+DiffExp |>
+    select(Geneid, SYMBOL, lfdr, betahat) |>
+    arrange(desc(abs(betahat))) |>
+    print(n = 300)
+    filter(lfdr < 0.01) |>
+    pull()
+
+sig_results_df = import(here::here(paste0("output/significant_gxe_eqtl_head.tsv")))
+table(DE_genes %in% sig_results_df$Trait)
+table(unique(sig_results_df$Trait) %in% DE_genes)
+
+DiffExp |>
+    filter(Geneid %in% sig_results_df$Trait) |>
+    arrange(desc(abs(lfdr))) |>
+    select(Geneid, SYMBOL, lfdr, betahat) |>
+    print(n = 300)
+
 eQTL_GxE = import(here::here("output/significant_gxe_eqtl_head.tsv"))
 
 head = import(here::here("SBM/snakemake/cache/blockSummary/fdr-1e-3/layered/head/gene_block.csv"))

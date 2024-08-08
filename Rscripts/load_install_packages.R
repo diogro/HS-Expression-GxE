@@ -28,7 +28,10 @@ packages <- c("gdsfmt",
               "deruncie/GridLMM", 
               "snpStats", 
               "ozancinar/poolr",
-              "hexbin")
+              "hexbin",
+              "cran/cate",
+              "cran/esaBcv",
+              "dglm")
 # pak::pkg_install(packages)
 packages[grepl("/", packages)] <- gsub(".+/", "", packages[grepl("/", packages)])
 lapply(packages, library, character.only = TRUE)

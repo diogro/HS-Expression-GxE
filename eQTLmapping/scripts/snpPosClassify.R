@@ -11,7 +11,7 @@ chrs <- c("2L", "2R", "3L", "3R", "4", "X")
 #   mutate(chr = paste0("chr", as.character(chr))) |>
 #   mutate(bp = as.numeric(bp))
 # export(snp_pos, file = here::here("cache/snp_pos.rds"))
-snp_pos = import(here::here("cache/snp_pos.rds"))
+snp_pos = import(here::here("cache/snp_pos.rds"), trust = TRUE)
 
 getCisSnps = function(transcript, window = 10000, snps = snp_pos){
   snp_GR <- GRanges(

@@ -29,6 +29,11 @@ def get_output_eqtl(wildcards):
     genes = get_genes(tissue)
     return ["results/eqtl/{tissue}/{gene}.tsv".format(tissue=tissue, gene=gene) for gene in genes]
 
+def get_output_veqtl(wildcards):
+    tissue = get_tissue(wildcards)
+    genes = get_genes(tissue)
+    return ["results/veqtl/{tissue}/{gene}.tsv".format(tissue=tissue, gene=gene) for gene in genes]
+
 rule all:
     input:
         expand("vcf_files/imputed/{tissue}.imputed.vcf.gz", tissue=tissues),
@@ -38,7 +43,8 @@ rule all:
         expand("cache/Va.{tissue}.tsv", tissue=tissues),
         # TODO: Add them back once we're happy with prior steps
         [get_output_gxe(tissue) for tissue in tissues],
-        [get_output_eqtl(tissue) for tissue in tissues]
+        [get_output_eqtl(tissue) for tissue in tissues],
+        [get_output_veqtl(tissue) for tissue in tissues]
 
 rule beagle:
     threads: 16
@@ -190,3 +196,17 @@ rule runGridLMM:
         results="results/eqtl/{tissue}/{gene}.tsv"
     script:
         "scripts/runGridLMM.R"
+
+rule runDglmSNP:
+    threads: 1
+    resources:
+        cores=lambda wc, threads: threads,
+        mem_mb=lambda wc, attempt: attempt * 16000
+    input:
+        phenotypes="phenotypes/{tissue}.tsv",
+        covariates="covariates/{tissue}.tsv",
+        gene_list="phenotypes/{tissue}.genes.txt"
+    output:
+        results="results/veqtl/{tissue}/{gene}.tsv"
+    script:
+        "scripts/run_veQTL_dGLM.R"

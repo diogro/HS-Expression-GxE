@@ -4,14 +4,14 @@ source(here::here("Rscripts/functions.R"))
 # Read VCFs
 ################
 
-vcf.head <- "data/GXEpaper/HEAD/genotypes/VCF/Dmel_head_hs_ctrl_Miss80_MAF5_LD8_HWE_1975ind.vcf"
-vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
+# vcf.head <- "data/GXEpaper/HEAD/genotypes/VCF/Dmel_head_hs_ctrl_Miss80_MAF5_LD8_HWE_1975ind.vcf"
+# vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
 
-seqVCF2GDS(vcf.head, "cache/ccm_head.gds", parallel=6L)
-seqVCF2GDS(vcf.body, "cache/ccm_body.gds", parallel=6L)
+# seqVCF2GDS(vcf.head, "cache/ccm_head.gds", parallel=6L)
+# seqVCF2GDS(vcf.body, "cache/ccm_body.gds", parallel=6L)
 
-snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
-snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
+# snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
+# snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
 
 
 ################
@@ -85,10 +85,18 @@ correctModelMatrix = function(X){
     X = X[,vars]
     X
 }
-setModelMatrices = function(current_tissue, y, covariates){
+setModelMatrices = function(current_tissue, y, covariates, contrast_sum = TRUE){
     cov = filter(covariates, tissue == current_tissue) |> 
           filter(id %in% rownames(y[[current_tissue]]$samples)) |>
           arrange(match(id, rownames(y[[current_tissue]]$samples)))
+
+    if(contrast_sum){
+        contrasts(cov$RNAlibBatch) <- contr.sum(levels(cov$RNAlibBatch))
+        contrasts(cov$RNAseqBatch) <- contr.sum(levels(cov$RNAseqBatch))
+        contrasts(cov$egglayBatch) <- contr.sum(levels(cov$egglayBatch))
+        contrasts(cov$platingBatch) <- contr.sum(levels(cov$platingBatch))
+    }
+
     mod1 <- model.matrix(~1+treatment + 
                         egglayBatch + 
                         RNAseqBatch + 
@@ -110,6 +118,10 @@ setModelMatrices = function(current_tissue, y, covariates){
          design = design)
 }
 rnaseq_data = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates)
+rnaseq_data_old = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates, FALSE)
+
+head(rnaseq_data$head$mod1)
+head(rnaseq_data_old$head$mod1)
 
 setCPMVoom <- function(data){
     data$cpm  <-  cpm(data$counts, log=TRUE)
@@ -118,6 +130,7 @@ setCPMVoom <- function(data){
     data
 }
 rnaseq_data = map(rnaseq_data, setCPMVoom)
+rnaseq_data_old = map(rnaseq_data_old, setCPMVoom)
 
 # setSVAnum = function(data){
 #     counts_list = list(cpm = data$cpm, 
@@ -133,6 +146,9 @@ rnaseq_data = map(rnaseq_data, setCPMVoom)
 rnaseq_data$head$n.sva = list(cpm = 2, voom = 2, l2c = 2)
 rnaseq_data$body$n.sva = list(cpm = 0, voom = 0, l2c = 1)
 
+rnaseq_data_old$head$n.sva = list(cpm = 2, voom = 2, l2c = 2)
+rnaseq_data_old$body$n.sva = list(cpm = 0, voom = 0, l2c = 1)
+
 setSVA = function(data){
      counts_list = list(cpm = data$cpm, 
                         voom = data$voom$E, 
@@ -144,6 +160,8 @@ setSVA = function(data){
 }
 options(future.globals.maxSize = 1e8 * 1024)
 rnaseq_data = map(rnaseq_data, setSVA)
+rnaseq_data_old = map(rnaseq_data_old, setSVA)
+
 
 getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatment){
     no.batch <- removeBatchEffect(x, 
@@ -169,6 +187,9 @@ makeResiduals <- function(data){
 }
 options(future.globals.maxSize = 1e8 * 1024)
 rnaseq_data = future_map(rnaseq_data, makeResiduals)
+rnaseq_data_old$head$tissue <- "head_old"
+rnaseq_data_old$body$tissue <- "body_old"
+rnaseq_data_old = future_map(rnaseq_data_old, makeResiduals)
 
 setMouthwash = function(data){
      counts_list = list(cpm = data$cpm, 
@@ -181,6 +202,8 @@ setMouthwash = function(data){
      data
 }
 rnaseq_data = future_map(rnaseq_data, setMouthwash)
+rnaseq_data_old = future_map(rnaseq_data_old, setMouthwash)
+
 
 makeResidualsMwash <- function(data){
     covariates <- data$covariates
@@ -195,6 +218,8 @@ makeResidualsMwash <- function(data){
     data
 }
 rnaseq_data = future_map(rnaseq_data, makeResidualsMwash)
+rnaseq_data_old = future_map(rnaseq_data_old, makeResidualsMwash)
+
 
 export(rnaseq_data, affix_date("cache/rnaseq_all.rds"))
 export(covariates, affix_date("cache/covariates.rds"))
