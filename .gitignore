@@ -24,3 +24,6 @@ output/GxEMM/
 .vscode/settings.json
 .vscode/
 notebooks/__pycache__/*
+gcta/out
+output/gcta/*log
+output/gcta/*hsq

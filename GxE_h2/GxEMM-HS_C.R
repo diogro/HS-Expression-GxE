@@ -21,7 +21,7 @@ if (sys.nframe() == 0L) {
                                     metavar = "model"),
                         make_option("--input",
                                     help = ("Path to gene expression rds file."),
-                                    default = "/Genomics/argo/users/damelo/projects/HS-Expression-GxE/cache/rnaseq_all_2023-11-17.rds",
+                                    default = "/Genomics/argo/users/damelo/projects/HS-Expression-GxE/cache/rnaseq_all_2024-03-21.rds",
                                     metavar = "input"),
                         make_option("--grm", 
                                     default = "/Genomics/argo/users/damelo/projects/HS-Expression-GxE/eQTLmapping/GRMs",

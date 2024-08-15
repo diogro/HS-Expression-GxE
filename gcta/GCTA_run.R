@@ -5,6 +5,7 @@ library(stringr)
 if (sys.nframe() == 0L) {
     option_list <- list(
                         make_option("--gene",
+                                    default = 1,
                                     help = ("Gene number to run"),
                                     metavar = "gene"),
                         make_option("--gene_offset",
@@ -16,7 +17,7 @@ if (sys.nframe() == 0L) {
                                     default = "hs",
                                     metavar = "treatment"),
                         make_option("--outputDir",
-                                    default = "/Genomics/ayroleslab2/diogro/projects/NEX-HS_C-GxE/data/output/gcta/",
+                                    default = "/Genomics/argo/users/damelo/projects/HS-Expression-GxE/output/gcta",
                                     help = ("OutPut directory"),
                                     metavar = "outputDir")
     )
@@ -38,8 +39,7 @@ if (sys.nframe() == 0L) {
 i_gene = i_gene + gene_offset
 print(i_gene)
 
-gene_list = read.csv("gene_list.csv", header = FALSE)
-
+gene_list = read.csv("/Genomics/argo/users/damelo/projects/HS-Expression-GxE/gcta/gene_list.csv", header = FALSE)
 
 out_name =  paste0(str_pad(i_gene, 4, pad = "0"), "_", gene_list[i_gene, 1], "_", treatment)
 out_file = file.path(out.dir, paste0(out_name, ".hsq"))
@@ -54,14 +54,16 @@ if(!file.exists(out.dir)){
 out_file = file.path(out.dir, out_name)
 if(treatment == "hs" | treatment == "ctrl"){
     command  = paste0("gcta --reml --grm grm --mpheno ", i_gene,
-                      " --pheno VOOMCounts_CPM1_head_", treatment,
-                      "_covfree_4svs_CORRECT_Jan8.21.txt --out ", out_file)  
+                      " --pheno log2Counts_head_", treatment,
+                      "_covfree.txt --out ", out_file)  
 } else if(treatment == "hsctrl"){
     command  = paste0("gcta --reml --grm grm --mpheno ", i_gene,
                       " --gxe HSC.gxe",
-                      " --pheno VOOMCounts_CPM1_head_", treatment,
-                      "_covfree_4svs_CORRECT_Jan8.21.txt --out ", out_file)  
+                      " --pheno log2Counts_head_", treatment,
+                      "_covfree.txt --out ", out_file)  
 } else
     stop("Unknown treatment. Use: hs, ctrl or hsctrl for a GxE model.")
 print(command)
+setwd(here::here("gcta"))
 system(command)
+setwd(here::here())
