@@ -99,3 +99,18 @@ h2_by_condition =
     relocate(Gene, Tissue, Condition)
 export(h2_by_condition, "output/h2_head_hs-ctrl.tsv")
 
+
+h2_gxe = 
+    map_df(models_HSxC, function(x) x$var[,1]) |>
+        mutate(Gene = names(models_HSxC)) |>
+        mutate(Gene = names(models_HSxC), 
+               Tissue = "head") |>
+        relocate(Gene, Tissue) |>
+   inner_join(
+   map_df(models_HSxC, function(x) x$stats["Pval"]) |>
+        mutate(Gene = names(models_HSxC), 
+               Tissue = "head", 
+               Pval = as.numeric(Pval)) |>
+        relocate(Gene, Tissue),
+                by = c("Gene", "Tissue"))
+export(h2_gxe, "output/h2_head_test-GxE_hs-vs-ctrl.tsv")
