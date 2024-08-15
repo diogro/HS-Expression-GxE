@@ -27,3 +27,9 @@ notebooks/__pycache__/*
 gcta/out
 output/gcta/*log
 output/gcta/*hsq
+test.png
+gcta/grm.grm.bin
+gcta/gene_list.csv
+gcta/grm.grm.id
+gcta/HSC.gxe
+gcta/log2Counts_*_covfree.txt
