@@ -1,3 +1,8 @@
+library(tidyverse)
+library(cowplot)
+library(rio)
+
+
 getGCTA_output_single = function(current_file, file){
     variance_table = matrix(NA, 4, 2)
     variance_table[1,] = as.numeric(current_file[5:6])
@@ -56,5 +61,41 @@ r_meta_df_gcta = data.frame(index, gene, treatment, file = result_files)
 models_ctrl = lapply(unique(r_meta_df_gcta$gene[r_meta_df_gcta$treatment=="ctrl"]), getGCTA_output)
 models_HiSu = lapply(unique(r_meta_df_gcta$gene[r_meta_df_gcta$treatment=="hs"]), getGCTA_output, "hs")
 models_HSxC = lapply(unique(r_meta_df_gcta$gene[r_meta_df_gcta$treatment=="hsctrl"]), getGCTA_output, "hsctrl")
-names(models_ctrl) = names(models_HiSu) = unique(r_meta_df_gcta$gene)
+names(models_ctrl) = unique(r_meta_df_gcta$gene[r_meta_df_gcta$treatment=="ctrl"])
+names(models_HiSu) = unique(r_meta_df_gcta$gene[r_meta_df_gcta$treatment=="hs"])
 names(models_HSxC) = unique(r_meta_df_gcta$gene[r_meta_df_gcta$treatment=="hsctrl"])
+
+length(models_ctrl)
+length(models_HiSu)
+length(models_HSxC)
+
+p = map_df(models_HSxC, function(x) x$var[,1]) %>%
+      mutate(.id = names(models_HSxC)) |>
+      select(.id, 'V(G)', 'V(GxE)') %>%
+      pivot_longer(cols = 2:ncol(.)) %>%
+      ggplot(aes(name, value)) + 
+      geom_boxplot() + theme_minimal_grid() + 
+      labs(y = "Estimates", x = "Variance Component")
+save_plot("test.png", p)
+
+p = map_df(models_HSxC, function(x) x$var[,1]) %>%
+      mutate(.id = names(models_HSxC)) |>
+      select(.id, 'V(G)/Vp', 'V(GxE)/Vp') %>%
+      pivot_longer(cols = 2:ncol(.)) %>%
+      ggplot(aes(name, value)) + 
+      geom_boxplot() + theme_minimal_grid() + 
+      labs(y = "Estimates", x = "Variance Component")
+save_plot("test.png", p)
+
+models_ctrl[[1]]$var
+h2_by_condition = 
+    map_df(models_ctrl, function(x) x$var[,1]) |>
+        mutate(Gene = names(models_ctrl), Condition = "ctrl") |> 
+    bind_rows(
+        map_df(models_HiSu, function(x) x$var[,1]) |>
+            mutate(Gene = names(models_ctrl), Condition = "hs")) |>
+    rename(h2  = `V(G)/Vp`) |>
+    mutate(Tissue = "head") |>
+    relocate(Gene, Tissue, Condition)
+export(h2_by_condition, "output/h2_head_hs-ctrl.tsv")
+

@@ -9,5 +9,5 @@
 #SBATCH --error=out/gcta_%A_%a.err
 
 cd /Genomics/argo/users/damelo/projects/HS-Expression-GxE/gcta
-Rscript GCTA_run.R --gene $SLURM_ARRAY_TASK_ID --treatment ctrl --gene_offset 6000
-Rscript GCTA_run.R --gene $SLURM_ARRAY_TASK_ID --treatment hs --gene_offset 6000
+Rscript GCTA_run.R --gene $SLURM_ARRAY_TASK_ID --treatment ctrl --gene_offset 3000
+Rscript GCTA_run.R --gene $SLURM_ARRAY_TASK_ID --treatment hs --gene_offset 3000
