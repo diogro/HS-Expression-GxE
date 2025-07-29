@@ -4,15 +4,14 @@ source(here::here("Rscripts/functions.R"))
 # Read VCFs
 ################
 
-# vcf.head <- "data/GXEpaper/HEAD/genotypes/VCF/Dmel_head_hs_ctrl_Miss80_MAF5_LD8_HWE_1975ind.vcf"
-# vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
+vcf.head <- "data/Genotypes_feb2020/head/head.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
+vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
 
-# seqVCF2GDS(vcf.head, "cache/ccm_head.gds", parallel=6L)
-# seqVCF2GDS(vcf.body, "cache/ccm_body.gds", parallel=6L)
+seqVCF2GDS(vcf.head, "cache/ccm_head.gds")
+seqVCF2GDS(vcf.body, "cache/ccm_body.gds")
 
-# snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
-# snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
-
+snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
+snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
 
 ################
 # Read covariates for all samples
@@ -168,10 +167,14 @@ getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatm
                                   design = design, 
                                   covariates = cbind(mod0, sva))
     pca_no.batch = pca(no.batch)
+    # Check if the directory exists, if not create it
+    if(!dir.exists("tmp")){
+        dir.create("tmp")
+    }
     png(paste0('tmp/PCA-batch-corrected-', tissue, '-', label, '.png'), width = 1080, height = 1080)
         print(pca_plot(pca_no.batch, c("C", "HS")[treatment]))
     dev.off()
-    rownames(no.batch) = data$counts$genes[,1]
+    rownames(no.batch) = x$counts$genes[,1]
     no.batch
 }
 makeResiduals <- function(data){
@@ -179,14 +182,14 @@ makeResiduals <- function(data){
     counts_list = list(cpm = data$cpm, 
                        voom = data$voom$E, 
                        l2c = data$l2c)
-    data$batch_residuals <- future_map2(counts_list, names(counts_list), 
+    data$batch_residuals <- map2(counts_list, names(counts_list), 
                             \(x, y) getBatchResiduals(x, y, data$tissue, 
                                                       data$design, data$mod0,
                                                       treatment = pull(covariates, treatment)))  
     data
 }
 options(future.globals.maxSize = 1e8 * 1024)
-rnaseq_data = future_map(rnaseq_data, makeResiduals)
+rnaseq_data = map(rnaseq_data, makeResiduals)
 rnaseq_data_old$head$tissue <- "head_old"
 rnaseq_data_old$body$tissue <- "body_old"
 rnaseq_data_old = future_map(rnaseq_data_old, makeResiduals)

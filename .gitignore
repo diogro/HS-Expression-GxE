@@ -33,3 +33,5 @@ gcta/gene_list.csv
 gcta/grm.grm.id
 gcta/HSC.gxe
 gcta/log2Counts_*_covfree.txt
+.DS_Store
+Rscripts/analysis/.ipynb_checkpoints/*

@@ -1,9 +1,7 @@
 
 tissues = ["head", "body"]
 
-# Set the path to the Beagle executable
-# TODO: 
-beagle_executable = "/Genomics/argo/users/damelo/bin/beagle.22Jul22.46e.jar"
+beagle_executable = "/home/melo/bin/beagle.27Feb25.75f.jar"
 
 def get_tissue(wildcards):
     if type(wildcards) == str:

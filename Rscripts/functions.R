@@ -105,7 +105,7 @@ gt2num <- function(genomat) {
   return(list("genomat" = genomat, "removed_loci" = removed_loci))
 }
 
-# pak::pkg_install("TxDb.Dmelanogaster.UCSC.dm6.ensGene")
+pak::pkg_install("TxDb.Dmelanogaster.UCSC.dm6.ensGene")
 library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
 txdb = TxDb.Dmelanogaster.UCSC.dm6.ensGene
 gene_locations_GR <- transcripts(txdb, columns = "gene_id")

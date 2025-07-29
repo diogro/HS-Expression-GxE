@@ -1,4 +1,4 @@
-vcf_files: ["data/GXEpaper/HEAD/genotypes/VCF/Dmel_head_hs_ctrl_Miss80_MAF5_LD8_HWE_1975ind",
+vcf_files: ["data/Genotypes_feb2020/head/head.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode",
             "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode"]
 #fdr: [1e-2,1e-3,1e-4]
 type: "batch" # "layer" or "batch"
