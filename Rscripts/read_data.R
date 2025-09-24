@@ -4,14 +4,14 @@ source(here::here("Rscripts/functions.R"))
 # Read VCFs
 ################
 
-vcf.head <- "data/Genotypes_feb2020/head/head.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
-vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
+# vcf.head <- "data/Genotypes_feb2020/head/head.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
+# vcf.body <- "data/Genotypes_feb2020/body/body.filtered.IndMiss80.SiteMiss80MAF5.LD8.HWE.vcf.recode.vcf"
 
-seqVCF2GDS(vcf.head, "cache/ccm_head.gds")
-seqVCF2GDS(vcf.body, "cache/ccm_body.gds")
+# seqVCF2GDS(vcf.head, "cache/ccm_head.gds")
+# seqVCF2GDS(vcf.body, "cache/ccm_body.gds")
 
-snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
-snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
+# snps_head = seqOpen("cache/ccm_head.gds") # seqClose("ccm_head.gds")
+# snps_body = seqOpen("cache/ccm_body.gds") # seqClose("ccm_body.gds")
 
 ################
 # Read covariates for all samples
@@ -117,10 +117,8 @@ setModelMatrices = function(current_tissue, y, covariates, contrast_sum = TRUE){
          design = design)
 }
 rnaseq_data = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates)
-rnaseq_data_old = map(c(head = "head", body = "body"), setModelMatrices, y.filtered, covariates, FALSE)
 
 head(rnaseq_data$head$mod1)
-head(rnaseq_data_old$head$mod1)
 
 setCPMVoom <- function(data){
     data$cpm  <-  cpm(data$counts, log=TRUE)
@@ -129,7 +127,6 @@ setCPMVoom <- function(data){
     data
 }
 rnaseq_data = map(rnaseq_data, setCPMVoom)
-rnaseq_data_old = map(rnaseq_data_old, setCPMVoom)
 
 # setSVAnum = function(data){
 #     counts_list = list(cpm = data$cpm, 
@@ -145,9 +142,6 @@ rnaseq_data_old = map(rnaseq_data_old, setCPMVoom)
 rnaseq_data$head$n.sva = list(cpm = 2, voom = 2, l2c = 2)
 rnaseq_data$body$n.sva = list(cpm = 0, voom = 0, l2c = 1)
 
-rnaseq_data_old$head$n.sva = list(cpm = 2, voom = 2, l2c = 2)
-rnaseq_data_old$body$n.sva = list(cpm = 0, voom = 0, l2c = 1)
-
 setSVA = function(data){
      counts_list = list(cpm = data$cpm, 
                         voom = data$voom$E, 
@@ -159,13 +153,11 @@ setSVA = function(data){
 }
 options(future.globals.maxSize = 1e8 * 1024)
 rnaseq_data = map(rnaseq_data, setSVA)
-rnaseq_data_old = map(rnaseq_data_old, setSVA)
 
-
-getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatment){
+getBatchResiduals <- function(x, label, tissue, rownames, design, mod0, sva = NULL, treatment){
     no.batch <- removeBatchEffect(x, 
-                                  design = design, 
-                                  covariates = cbind(mod0, sva))
+                                  design = design[,1:2], 
+                                  covariates = cbind(mod0[,-1], sva))
     pca_no.batch = pca(no.batch)
     # Check if the directory exists, if not create it
     if(!dir.exists("tmp")){
@@ -174,58 +166,52 @@ getBatchResiduals <- function(x, label, tissue, design, mod0, sva = NULL, treatm
     png(paste0('tmp/PCA-batch-corrected-', tissue, '-', label, '.png'), width = 1080, height = 1080)
         print(pca_plot(pca_no.batch, c("C", "HS")[treatment]))
     dev.off()
-    rownames(no.batch) = x$counts$genes[,1]
+    rownames(no.batch) = rownames
     no.batch
 }
 makeResiduals <- function(data){
     covariates <- data$covariates
+    gene_names = data$counts$genes[,1]
     counts_list = list(cpm = data$cpm, 
                        voom = data$voom$E, 
                        l2c = data$l2c)
     data$batch_residuals <- map2(counts_list, names(counts_list), 
                             \(x, y) getBatchResiduals(x, y, data$tissue, 
-                                                      data$design, data$mod0,
-                                                      treatment = pull(covariates, treatment)))  
+                            gene_names, data$design, data$mod0,
+                            treatment = pull(covariates, treatment)))  
     data
 }
-options(future.globals.maxSize = 1e8 * 1024)
 rnaseq_data = map(rnaseq_data, makeResiduals)
-rnaseq_data_old$head$tissue <- "head_old"
-rnaseq_data_old$body$tissue <- "body_old"
-rnaseq_data_old = future_map(rnaseq_data_old, makeResiduals)
 
 setMouthwash = function(data){
      counts_list = list(cpm = data$cpm, 
                         voom = data$voom$E, 
                         l2c = data$l2c)
      
-     data$mwash <- future_map2(counts_list[data$n.sva!=0], data$n.sva[data$n.sva!=0], 
+     data$mwash <- map2(counts_list[data$n.sva!=0], data$n.sva[data$n.sva!=0], 
                              \(x, y) mouthwash(Y = t(x), X = data$mod1, k = y, cov_of_interest = 2,
                                                include_intercept = FALSE))
      data
 }
-rnaseq_data = future_map(rnaseq_data, setMouthwash)
-rnaseq_data_old = future_map(rnaseq_data_old, setMouthwash)
-
+rnaseq_data = map(rnaseq_data, setMouthwash)
 
 makeResidualsMwash <- function(data){
     covariates <- data$covariates
+    gene_names = data$counts$genes[,1]
     counts_list = list(cpm = data$cpm, 
                        voom = data$voom$E, 
                        l2c = data$l2c)
-    data$mwash_residuals <- future_map2(counts_list[data$n.sva!=0], 
+    data$mwash_residuals <- map2(counts_list[data$n.sva!=0], 
                                         names(counts_list)[data$n.sva!=0], 
                             \(x, y) getBatchResiduals(x, paste0(y, "-mwash"), data$tissue, 
-                                                      data$design, data$mod0, sva = data$mwash[[y]]$Zhat,
+                                                      gene_names, data$design, data$mod0, sva = data$mwash[[y]]$Zhat,
                                                       treatment = pull(covariates, treatment)))  
     data
 }
-rnaseq_data = future_map(rnaseq_data, makeResidualsMwash)
-rnaseq_data_old = future_map(rnaseq_data_old, makeResidualsMwash)
-
+rnaseq_data = map(rnaseq_data, makeResidualsMwash)
 
 export(rnaseq_data, affix_date("cache/rnaseq_all.rds"))
 export(covariates, affix_date("cache/covariates.rds"))
+export(rnaseq_data, "cache/rnaseq_all.rds")
+export(covariates, "cache/covariates.rds")
 
-rnaseq_data <- import("cache/rnaseq_all.rds")
-covariates  <- import("cache/covariates.rds")

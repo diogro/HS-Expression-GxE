@@ -1,6 +1,6 @@
 source(here::here("Rscripts/functions.R"))
 
-rnaseq_data = import("cache/rnaseq_all_2024-03-21.rds")
+rnaseq_data = import("cache/rnaseq_all_2025-07-30.rds", trust = TRUE)
 
 DE_limma = function(data){
     design <- model.matrix(~0+treatment + 
@@ -26,7 +26,7 @@ DE_limma = function(data){
     res = left_join(res, significance)
     list(table = res, lmfit = fit, eBayes = fit2, summary = summary(decideTests(fit2, p.value = 0.01)))
 }
-diff_expression = future_map(rnaseq_data, DE_limma)
+diff_expression = map(rnaseq_data, DE_limma)
 export(diff_expression, affix_date("cache/DE_limma.rds"))
 
 diff_expression |> map("summary")

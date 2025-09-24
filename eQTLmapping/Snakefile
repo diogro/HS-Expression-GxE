@@ -139,7 +139,7 @@ rule prepare_pheno:
         mem_mb=lambda wc, attempt: attempt * 32000
     input:
     # TODO: Hardcoded path
-        rna_seq="../cache/rnaseq_all_2024-03-21.rds",
+        rna_seq="../cache/rnaseq_all_2025-07-30.rds",
         sample_list="sample_list/{tissue}.txt"
     output:
         covariates="covariates/{tissue}.tsv",

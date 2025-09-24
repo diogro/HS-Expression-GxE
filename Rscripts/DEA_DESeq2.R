@@ -1,6 +1,6 @@
 source(here::here("Rscripts/functions.R"))
 
-rnaseq_data = import("cache/rnaseq_all_2024-03-21.rds")
+rnaseq_data = import("cache/rnaseq_all_2025-08-05.rds", trust = TRUE)
 
 data = rnaseq_data$head
 
@@ -19,7 +19,7 @@ DE_DESeq2 <- function(data){
     mod0 = data$mod0
     if(data$tissue == "head"){
         normalized_counts <- counts(dds, normalized=TRUE)
-        mwash <- mouthwash(Y = t(normalized_counts), X = data$mod1, k = 2, cov_of_interest = 2,
+        mwash <- mouthwash(Y = t(normalized_counts), X = data$mod1, k = 4, cov_of_interest = 2,
                    include_intercept = FALSE)
         design(dds) <- cbind(design, mwash$Zhat)
         mod0 =  cbind(mod0, mwash$Zhat)
@@ -27,8 +27,8 @@ DE_DESeq2 <- function(data){
 
     dat <- vst(dds, blind = FALSE)
     dat_noBatch <- removeBatchEffect(assay(dat), 
-                                design = design, 
-                                covariates = mod0)
+                                design = design[,1:2], 
+                                covariates = mod0[,-1])
     norm_counts_pca = pca(dat_noBatch)
     col = pull(data$covariates, treatment)
     png(paste0('tmp/vstCounts-PCA-', data$tissue, '-forDESeq2.png'), width = 1080, height = 1080)
@@ -43,7 +43,7 @@ DE_DESeq2 <- function(data){
 }
 diff_expression = map(rnaseq_data, DE_DESeq2)
 export(diff_expression, affix_date("cache/DE_DESeq2.rds"))
-diff_expression = import("cache/DE_DESeq2_2024-03-21.rds")
+diff_expression = import("cache/DE_DESeq2_2025-08-06.rds")
 
 table = diff_expression |> 
     map("table") |> 
@@ -78,7 +78,7 @@ label_body = table |>
 labels = bind_rows(label_head, label_body )
 names(table)
 {p2 = ggplot(table, 
-        aes(log2FoldChange, -log10(qvalue))) +
+        aes(log2FoldChange, -log10(padj))) +
     geom_point(size = 0.1, alpha = 0.1, color = "gray") + 
     geom_point(data = table |> filter(padj < 0.05), size = 0.1, alpha = 0.5, color = "blue") + 
     geom_text_repel(data = labels, 

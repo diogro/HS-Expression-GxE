@@ -1,26 +1,27 @@
 source(here::here("Rscripts/functions.R"))
 
-results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2024-03-21.csv")),
-               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2024-03-21.csv")),
-               DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2024-03-21.csv"))) 
+results = list(limma = import(here::here("output/HS-ctrl-DE_limma-table_2025-08-04.csv")),
+               vicar = import(here::here("output/HS-ctrl-DE_vicar-table_2025-07-30.csv")),
+               DESeq = import(here::here("output/HS-ctrl-DE_DESeq2-table_2025-08-04.csv"))) 
 
 table = list_rbind(list(
     limma = results$limma |>
         dlply("tissue") |>
         map(\(x) mutate(x, qvalue = qvalue(P.Value)$qvalue)) |> list_rbind() |>
-        rename( effect = logFC) |>
-        select(tissue, Geneid, SYMBOL, effect, qvalue),
+        rename( effect = logFC, padj = adj.P.Val) |>
+        select(tissue, Geneid, SYMBOL, effect, padj, qvalue),
     vicar = results$vicar |>
         rename(effect = PosteriorMean) |>
-        select(tissue, Geneid, SYMBOL, effect, qvalue),
+        mutate(padj = lfdr) |>
+        select(tissue, Geneid, SYMBOL, effect, padj, qvalue),
     DESeq = results$DESeq |>
         dlply("tissue") |>
         map(\(x) mutate(x, qvalue = qvalue(pvalue)$qvalue)) |> list_rbind() |>
         rename( effect = log2FoldChange) |>
-        select(tissue, Geneid, SYMBOL, effect, qvalue)), names_to = "method")
+        select(tissue, Geneid, SYMBOL, effect, padj, qvalue)), names_to = "method")
 
 wide_table = table |>
-    pivot_wider(values_from = c("effect", "qvalue"), names_from = "method") 
+    pivot_wider(values_from = c("effect", "padj", "qvalue"), names_from = "method") 
 
 color_points = wide_table |> 
     filter(tissue == "head") %>%
@@ -98,7 +99,7 @@ label_body = table |>
 labels = bind_rows(label_head, label_body )
 
 {p1 = ggplot(table,
-        aes(PosteriorMean, -log10(qvalue))) +
+        aes(PosteriorMean, -log10(lfdr))) +
     geom_point(size = 0.1, alpha = 0.1, color = "gray") + 
     geom_point(data = table |> filter(NegativeProb > 0.999 | PositiveProb > 0.999), 
                size = 0.1, alpha = 0.5, color = "blue") + 
@@ -113,14 +114,14 @@ labels = bind_rows(label_head, label_body )
 table = results$limma |> dlply("tissue") |> map(\(x) mutate(x, qvalue = qvalue(P.Value)$qvalue)) |> list_rbind()
 label_head = table |> 
     filter(tissue == "head",
-           -log10(qvalue) > 11)
+           -log10(adj.P.Val) > 11)
 label_body = table |> 
     filter(tissue == "body",
-           -log10(qvalue) > 15)
+           -log10(adj.P.Val) > 15)
 labels = bind_rows(label_head, label_body )
 names(table)
 {p2 = ggplot(table, 
-        aes(logFC, -log10(qvalue))) +
+        aes(logFC, -log10(adj.P.Val))) +
     geom_point(size = 0.1, alpha = 0.1, color = "gray") + 
     geom_point(data = table |> filter(HSvsC != 0), size = 0.1, alpha = 0.5, color = "blue") + 
     geom_text_repel(data = labels, 
